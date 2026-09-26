@@ -1,0 +1,204 @@
+{
+  "datasetVersion": "1.0.0",
+  "fixtureId": "grounding-v1",
+  "evaluationRuns": [],
+  "notes": [
+    "No evaluation outputs are stored in this dataset.",
+    "Labels are authored from the fixture source and the reproduction commits. They were checked against analyzer evidence. They were not produced by the evaluated model.",
+    "A static finding is a fixed-rule match. It is not a technical-debt annotation.",
+    "An unresolved import is an unresolved reference. It is not labeled as a defect."
+  ],
+  "cases": [
+    {
+      "caseId": "gf-app-constant-condition",
+      "category": "static-correctness-finding",
+      "targetFile": "src/app.js",
+      "availableIn": ["experiment-file-baseline", "experiment-file-proposed"],
+      "expectedEvidence": [
+        {
+          "source": "static",
+          "path": "src/app.js",
+          "ruleId": "no-constant-condition",
+          "line": 3,
+          "column": 5,
+          "message": "Unexpected constant condition."
+        }
+      ],
+      "interpretationLabel": {
+        "status": "human-evaluation-required",
+        "reason": "No independently authored judgment says what a reviewer should conclude from this match."
+      },
+      "labelSource": "Final src/app.js line 3 is `if (false)`. RepoGuard's fixed rule no-constant-condition matches a constant condition. Analyzer evidence for the reproduced fixture reports this path, rule, line, and column.",
+      "notes": "Not a technical-debt label."
+    },
+    {
+      "caseId": "gf-app-self-compare",
+      "category": "static-correctness-finding",
+      "targetFile": "src/app.js",
+      "availableIn": ["experiment-file-baseline", "experiment-file-proposed"],
+      "expectedEvidence": [
+        {
+          "source": "static",
+          "path": "src/app.js",
+          "ruleId": "no-self-compare",
+          "line": 6,
+          "column": 5,
+          "message": "Comparing to itself is potentially pointless."
+        }
+      ],
+      "interpretationLabel": {
+        "status": "human-evaluation-required",
+        "reason": "No independently authored judgment says what a reviewer should conclude from this match."
+      },
+      "labelSource": "The second commit adds `if (value === value)` at line 6 of final src/app.js. The fixed rule no-self-compare matches a comparison of a value with itself. Analyzer evidence reports this path, rule, line, and column.",
+      "notes": "Not a technical-debt label. The finding exists only in the final worktree."
+    },
+    {
+      "caseId": "gf-app-outgoing-dependency",
+      "category": "dependency-relationship",
+      "targetFile": "src/app.js",
+      "availableIn": ["experiment-file-proposed"],
+      "expectedEvidence": [
+        {
+          "source": "dependencies",
+          "relation": "outgoing",
+          "from": "src/app.js",
+          "to": "src/lib.js",
+          "kind": "import",
+          "importSpecifier": "./lib.js"
+        }
+      ],
+      "interpretationLabel": {
+        "status": "human-evaluation-required",
+        "reason": "The edge is a relationship, not an independently labeled defect or recommendation."
+      },
+      "labelSource": "Final and initial src/app.js both contain `import { add } from './lib.js'`, and src/lib.js exists. Proposed context lists that outgoing edge. Baseline context has no dependency section.",
+      "notes": "This is the repository-context fact that file-local static evidence does not state. It is not labeled as a defect."
+    },
+    {
+      "caseId": "gf-lib-incoming-dependency",
+      "category": "dependency-relationship",
+      "targetFile": "src/lib.js",
+      "availableIn": ["experiment-file-proposed"],
+      "expectedEvidence": [
+        {
+          "source": "dependencies",
+          "relation": "incoming",
+          "from": "src/app.js",
+          "to": "src/lib.js",
+          "kind": "import",
+          "importSpecifier": "./lib.js"
+        }
+      ],
+      "interpretationLabel": {
+        "status": "human-evaluation-required",
+        "reason": "An incoming edge does not by itself say whether the dependency is desirable."
+      },
+      "labelSource": "src/app.js imports ./lib.js and src/lib.js defines that module. Proposed context for src/lib.js lists the incoming edge from src/app.js.",
+      "notes": "Not a defect label."
+    },
+    {
+      "caseId": "gf-unresolved-import",
+      "category": "unresolved-import",
+      "targetFile": "src/unresolved.js",
+      "availableIn": ["experiment-file-proposed"],
+      "expectedEvidence": [
+        {
+          "source": "dependencies",
+          "relation": "unresolved",
+          "from": "src/unresolved.js",
+          "importSpecifier": "./missing.js",
+          "kind": "import"
+        }
+      ],
+      "interpretationLabel": {
+        "status": "human-evaluation-required",
+        "reason": "The dataset does not independently establish that the missing file is a bug rather than an unresolved reference."
+      },
+      "labelSource": "src/unresolved.js imports ./missing.js and the fixture contains no missing.js. Proposed context reports that relative import as unresolved. The file has no static findings.",
+      "notes": "Do not treat this label as a confirmed defect or as technical debt."
+    },
+    {
+      "caseId": "gf-clean-no-static-findings",
+      "category": "static-correctness-finding",
+      "targetFile": "src/clean.js",
+      "availableIn": ["experiment-file-baseline", "experiment-file-proposed"],
+      "expectedEvidence": [
+        {
+          "source": "static",
+          "path": "src/clean.js",
+          "findingCount": 0
+        }
+      ],
+      "interpretationLabel": {
+        "status": "human-evaluation-required",
+        "reason": "Absence of these fixed-rule matches is not an independently authored cleanliness or quality judgment."
+      },
+      "labelSource": "src/clean.js is `export const ready = true` and contains none of the constructs named by the fixed rule set. Analyzer evidence reports an empty finding list for this path.",
+      "notes": "Negative case for static findings. An empty list is not a technical-debt or health label."
+    },
+    {
+      "caseId": "gf-lib-function",
+      "category": "structural-characteristic",
+      "targetFile": "src/lib.js",
+      "availableIn": ["experiment-file-baseline", "experiment-file-proposed"],
+      "expectedEvidence": [
+        {
+          "source": "ast",
+          "path": "src/lib.js",
+          "functionName": "add",
+          "line": 1
+        }
+      ],
+      "interpretationLabel": {
+        "status": "human-evaluation-required",
+        "reason": "A function declaration has no independently authored quality label."
+      },
+      "labelSource": "src/lib.js line 1 is `export function add(left, right)`. File AST evidence lists function add at line 1. This fact is file-local and is present in both conditions.",
+      "notes": "Not a defect label."
+    },
+    {
+      "caseId": "gf-app-history",
+      "category": "historical-change-characteristic",
+      "targetFile": "src/app.js",
+      "availableIn": ["experiment-file-proposed"],
+      "expectedEvidence": [
+        {
+          "source": "history",
+          "path": "src/app.js",
+          "commitCount": 2,
+          "additions": 8,
+          "deletions": 0,
+          "historyDepth": "complete",
+          "isComplete": true
+        }
+      ],
+      "interpretationLabel": {
+        "status": "human-evaluation-required",
+        "reason": "Commit activity is not an independently authored defect, risk, or quality label."
+      },
+      "labelSource": "Reproduction creates two non-shallow commits that both change src/app.js. The first commit adds the 5-line initial file. The second adds 3 lines and deletes none. Summed change counts are therefore 8 additions and 0 deletions. Git-history evidence reports commitCount 2, those sums, historyDepth complete, and isComplete true. Timestamps are not labels because they change on each reproduction.",
+      "notes": "Baseline context does not include this history object. Counts are activity in the fixture history, not a score."
+    },
+    {
+      "caseId": "gf-repository-identity",
+      "category": "repository-identity",
+      "targetFile": "src/app.js",
+      "availableIn": ["experiment-file-proposed"],
+      "expectedEvidence": [
+        {
+          "source": "repository",
+          "name": "grounding-v1",
+          "branch": "main",
+          "sourceType": "github"
+        }
+      ],
+      "interpretationLabel": {
+        "status": "human-evaluation-required",
+        "reason": "Identity is harness input. It does not state a defect or a recommendation."
+      },
+      "labelSource": "The reproduction instructs context construction to use repository name grounding-v1, branch main, and sourceType github. Proposed context echoes that identity. Baseline context has no repository object.",
+      "notes": "This label is not discovered from a remote host and is not model output."
+    }
+  ]
+}

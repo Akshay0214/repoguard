@@ -1,0 +1,1174 @@
+{
+  "resultsVersion": "1.0.0",
+  "datasetVersion": "1.0.0",
+  "protocolVersion": "1.0.0",
+  "fixtureId": "grounding-v1",
+  "interpretationAgreement": "not-computed",
+  "aggregateScore": null,
+  "metricWeights": null,
+  "configuration": {
+    "model": "gpt-4o-mini",
+    "temperature": 0.2,
+    "maxCompletionTokens": 900,
+    "timeoutMs": 45000,
+    "maxRetries": 0,
+    "responseSchema": "repoguard_interpretation",
+    "factualObservation": "rendered by the server from validated evidence pointers",
+    "validationBounds": {
+      "summary": 1200,
+      "observations": 6,
+      "evidencePerObservation": 4,
+      "limitations": 10,
+      "text": 500
+    }
+  },
+  "reproduction": "matched frozen dataset labels before model calls",
+  "metrics": {
+    "baseline": {
+      "attempts": 4,
+      "successes": 4,
+      "failures": 0,
+      "notApplicable": 5,
+      "evidenceGroundingValidity": 1,
+      "expectedEvidenceCoverage": {
+        "pooledMatchedItems": 2,
+        "pooledExpectedItems": 4,
+        "pooled": 0.5,
+        "successfulOnlyMatchedItems": 2,
+        "successfulOnlyExpectedItems": 4,
+        "perCase": [
+          {
+            "caseId": "gf-app-constant-condition",
+            "outcome": "success",
+            "matched": 1,
+            "expected": 1
+          },
+          {
+            "caseId": "gf-app-self-compare",
+            "outcome": "success",
+            "matched": 1,
+            "expected": 1
+          },
+          {
+            "caseId": "gf-clean-no-static-findings",
+            "outcome": "success",
+            "matched": 0,
+            "expected": 1
+          },
+          {
+            "caseId": "gf-lib-function",
+            "outcome": "success",
+            "matched": 0,
+            "expected": 1
+          }
+        ]
+      },
+      "unsupportedEvidenceRate": 0,
+      "invalidOutputRate": 0,
+      "failureCategories": {},
+      "latencyMs": {
+        "min": 2749,
+        "median": 3105,
+        "max": 4392
+      }
+    },
+    "proposed": {
+      "attempts": 9,
+      "successes": 6,
+      "failures": 3,
+      "notApplicable": 0,
+      "evidenceGroundingValidity": 1,
+      "expectedEvidenceCoverage": {
+        "pooledMatchedItems": 4,
+        "pooledExpectedItems": 9,
+        "pooled": 0.4444444444444444,
+        "successfulOnlyMatchedItems": 4,
+        "successfulOnlyExpectedItems": 6,
+        "perCase": [
+          {
+            "caseId": "gf-app-constant-condition",
+            "outcome": "success",
+            "matched": 1,
+            "expected": 1
+          },
+          {
+            "caseId": "gf-app-self-compare",
+            "outcome": "success",
+            "matched": 1,
+            "expected": 1
+          },
+          {
+            "caseId": "gf-app-outgoing-dependency",
+            "outcome": "success",
+            "matched": 1,
+            "expected": 1
+          },
+          {
+            "caseId": "gf-lib-incoming-dependency",
+            "outcome": "failure",
+            "matched": 0,
+            "expected": 1
+          },
+          {
+            "caseId": "gf-unresolved-import",
+            "outcome": "success",
+            "matched": 1,
+            "expected": 1
+          },
+          {
+            "caseId": "gf-clean-no-static-findings",
+            "outcome": "failure",
+            "matched": 0,
+            "expected": 1
+          },
+          {
+            "caseId": "gf-lib-function",
+            "outcome": "failure",
+            "matched": 0,
+            "expected": 1
+          },
+          {
+            "caseId": "gf-app-history",
+            "outcome": "success",
+            "matched": 0,
+            "expected": 1
+          },
+          {
+            "caseId": "gf-repository-identity",
+            "outcome": "success",
+            "matched": 0,
+            "expected": 1
+          }
+        ]
+      },
+      "unsupportedEvidenceRate": 0.3333333333333333,
+      "invalidOutputRate": 0.3333333333333333,
+      "failureCategories": {
+        "unsupported evidence pointer": 3
+      },
+      "latencyMs": {
+        "min": 3334,
+        "median": 4355,
+        "max": 4642
+      }
+    }
+  },
+  "runs": [
+    {
+      "runId": "run-1.0.0-gf-app-constant-condition-baseline",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-app-constant-condition",
+      "condition": "baseline",
+      "contextMode": "experiment-file-baseline",
+      "targetFile": "src/app.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:02.378Z",
+      "outcome": "success",
+      "latencyMs": 4392,
+      "summary": "The analysis of the file 'src/app.js' reveals two static findings related to code quality issues, with no configuration used from the repository.",
+      "factualObservations": [
+        "src/app.js has a no-constant-condition finding at line 3, column 5: Unexpected constant condition. ast.path is src/app.js.",
+        "src/app.js has a no-self-compare finding at line 6, column 5: Comparing to itself is potentially pointless. ast.path is src/app.js.",
+        "ast.importCount is 1. ast.exportCount is 0.",
+        "ast.maxNestingDepth is 1.",
+        "static.repositoryConfigUsed is false.",
+        "ast.functionCount is 0. ast.classCount is 0."
+      ],
+      "evidencePointers": [
+        {
+          "source": "static",
+          "field": "finding",
+          "index": 0
+        },
+        {
+          "source": "ast",
+          "field": "path",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "finding",
+          "index": 1
+        },
+        {
+          "source": "ast",
+          "field": "path",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "importCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "exportCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "maxNestingDepth",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "repositoryConfigUsed",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "functionCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "classCount",
+          "index": null
+        }
+      ],
+      "interpretation": [
+        "The presence of a constant condition may indicate a logical error in the code.",
+        "Self-comparison in code can lead to unnecessary complexity and potential bugs.",
+        "The file contains a single import statement and no exports, indicating limited interaction with other modules.",
+        "The file has a low complexity with a maximum nesting depth of 1, suggesting straightforward logic.",
+        "No repository configuration was applied, which may affect the comprehensiveness of the findings.",
+        "The file does not contain any functions or classes, indicating it may serve a simple purpose or be incomplete."
+      ],
+      "limitations": [],
+      "cacheKey": "grounding-v1-experiment:experiment-file-baseline:gf-app-constant-condition:src/app.js",
+      "evidenceGrounded": true,
+      "expectedEvidenceMatched": 1,
+      "expectedEvidenceTotal": 1
+    },
+    {
+      "runId": "run-1.0.0-gf-app-constant-condition-proposed",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-app-constant-condition",
+      "condition": "proposed",
+      "contextMode": "experiment-file-proposed",
+      "targetFile": "src/app.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:06.772Z",
+      "outcome": "success",
+      "latencyMs": 3334,
+      "summary": "The repository contains a file with static analysis findings indicating potential issues with constant conditions and self-comparisons.",
+      "factualObservations": [
+        "static.findingsTruncated is false. static.findingsTruncated is false. src/app.js has a no-constant-condition finding at line 3, column 5: Unexpected constant condition.",
+        "static.findingsTruncated is false. src/app.js has a no-self-compare finding at line 6, column 5: Comparing to itself is potentially pointless.",
+        "ast.lineCount is 8.",
+        "ast.importCount is 1.",
+        "repository.name is grounding-v1. repository.branch is main.",
+        "history.commitCount is 2. history.isComplete is true."
+      ],
+      "evidencePointers": [
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "finding",
+          "index": 0
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "finding",
+          "index": 1
+        },
+        {
+          "source": "ast",
+          "field": "lineCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "importCount",
+          "index": null
+        },
+        {
+          "source": "repository",
+          "field": "name",
+          "index": null
+        },
+        {
+          "source": "repository",
+          "field": "branch",
+          "index": null
+        },
+        {
+          "source": "history",
+          "field": "commitCount",
+          "index": null
+        },
+        {
+          "source": "history",
+          "field": "isComplete",
+          "index": null
+        }
+      ],
+      "interpretation": [
+        "The file contains a finding related to a constant condition, which may indicate a logical error in the code.",
+        "The file contains a finding regarding a self-comparison, suggesting that the comparison may not be meaningful or necessary.",
+        "The file has a total of 8 lines of code, indicating a relatively small size.",
+        "The file includes 1 import statement, which may indicate a dependency on another module.",
+        "The repository is hosted on GitHub and is currently on the main branch, indicating it is likely the primary development branch.",
+        "The file has a complete history with 2 commits, suggesting that it has been tracked and modified over time."
+      ],
+      "limitations": [],
+      "cacheKey": "grounding-v1-experiment:experiment-file-proposed:gf-app-constant-condition:src/app.js",
+      "evidenceGrounded": true,
+      "expectedEvidenceMatched": 1,
+      "expectedEvidenceTotal": 1
+    },
+    {
+      "runId": "run-1.0.0-gf-app-self-compare-baseline",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-app-self-compare",
+      "condition": "baseline",
+      "contextMode": "experiment-file-baseline",
+      "targetFile": "src/app.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:10.107Z",
+      "outcome": "success",
+      "latencyMs": 3102,
+      "summary": "The analysis of the file 'src/app.js' revealed two static findings related to code quality issues, with no configuration used from the repository.",
+      "factualObservations": [
+        "src/app.js has a no-constant-condition finding at line 3, column 5: Unexpected constant condition.",
+        "src/app.js has a no-self-compare finding at line 6, column 5: Comparing to itself is potentially pointless.",
+        "ast.lineCount is 8.",
+        "ast.functionCount is 0.",
+        "ast.importCount is 1.",
+        "static.repositoryConfigUsed is false."
+      ],
+      "evidencePointers": [
+        {
+          "source": "static",
+          "field": "finding",
+          "index": 0
+        },
+        {
+          "source": "static",
+          "field": "finding",
+          "index": 1
+        },
+        {
+          "source": "ast",
+          "field": "lineCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "functionCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "importCount",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "repositoryConfigUsed",
+          "index": null
+        }
+      ],
+      "interpretation": [
+        "The presence of a constant condition in the code may lead to logical errors during execution.",
+        "The self-comparison in the code suggests a potential oversight that could lead to unnecessary complexity or confusion.",
+        "The file 'src/app.js' has a total of 8 lines of code, indicating a relatively small size.",
+        "There are no functions defined in 'src/app.js', which may indicate that the file is primarily for configuration or setup purposes.",
+        "The file imports one module, which may suggest a dependency on external functionality.",
+        "The repository's ESLint configuration was not utilized during the analysis, which may affect the comprehensiveness of the findings."
+      ],
+      "limitations": [],
+      "cacheKey": "grounding-v1-experiment:experiment-file-baseline:gf-app-self-compare:src/app.js",
+      "evidenceGrounded": true,
+      "expectedEvidenceMatched": 1,
+      "expectedEvidenceTotal": 1
+    },
+    {
+      "runId": "run-1.0.0-gf-app-self-compare-proposed",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-app-self-compare",
+      "condition": "proposed",
+      "contextMode": "experiment-file-proposed",
+      "targetFile": "src/app.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:13.210Z",
+      "outcome": "success",
+      "latencyMs": 4313,
+      "summary": "The analysis of the proposed file 'src/app.js' reveals several static issues related to code quality, with a complete Git history and defined dependencies.",
+      "factualObservations": [
+        "static.findingsTruncated is false. static.findingsTruncated is false. src/app.js has a no-constant-condition finding at line 3, column 5: Unexpected constant condition.",
+        "static.findingsTruncated is false. src/app.js has a no-self-compare finding at line 6, column 5: Comparing to itself is potentially pointless.",
+        "ast.importCount is 1. ast.exportCount is 0.",
+        "repository.name is grounding-v1. repository.branch is main. history.isComplete is true.",
+        "src/app.js has an outgoing import relationship to src/lib.js with specifier ./lib.js.",
+        "ast.maxNestingDepth is 1."
+      ],
+      "evidencePointers": [
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "finding",
+          "index": 0
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "finding",
+          "index": 1
+        },
+        {
+          "source": "ast",
+          "field": "importCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "exportCount",
+          "index": null
+        },
+        {
+          "source": "repository",
+          "field": "name",
+          "index": null
+        },
+        {
+          "source": "repository",
+          "field": "branch",
+          "index": null
+        },
+        {
+          "source": "history",
+          "field": "isComplete",
+          "index": null
+        },
+        {
+          "source": "dependencies",
+          "field": "outgoing",
+          "index": 0
+        },
+        {
+          "source": "ast",
+          "field": "maxNestingDepth",
+          "index": null
+        }
+      ],
+      "interpretation": [
+        "The presence of a constant condition indicates a potential logical error in the code.",
+        "The self-comparison in the code suggests a possible oversight that may lead to unnecessary operations.",
+        "The file contains a single import statement and no exports, indicating a potential utility or helper role.",
+        "The repository is hosted on GitHub and is actively maintained, as indicated by its complete history.",
+        "The file has an outgoing dependency on 'src/lib.js', suggesting it relies on external functionality.",
+        "The file has a low complexity with a maximum nesting depth of 1, which may indicate simplicity in logic."
+      ],
+      "limitations": [],
+      "cacheKey": "grounding-v1-experiment:experiment-file-proposed:gf-app-self-compare:src/app.js",
+      "evidenceGrounded": true,
+      "expectedEvidenceMatched": 1,
+      "expectedEvidenceTotal": 1
+    },
+    {
+      "runId": "run-1.0.0-gf-app-outgoing-dependency-baseline",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-app-outgoing-dependency",
+      "condition": "baseline",
+      "contextMode": "experiment-file-baseline",
+      "targetFile": "src/app.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:17.524Z",
+      "outcome": "not-applicable"
+    },
+    {
+      "runId": "run-1.0.0-gf-app-outgoing-dependency-proposed",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-app-outgoing-dependency",
+      "condition": "proposed",
+      "contextMode": "experiment-file-proposed",
+      "targetFile": "src/app.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:17.524Z",
+      "outcome": "success",
+      "latencyMs": 4642,
+      "summary": "The analysis of the file 'src/app.js' reveals several static issues and a complete Git history, but the repository's ESLint configuration was not utilized.",
+      "factualObservations": [
+        "static.findingsTruncated is false. static.findingsTruncated is false.",
+        "static.findingsTruncated is false. static.findingsTruncated is false.",
+        "ast.lineCount is 8. ast.importCount is 1. ast.functionCount is 0. ast.classCount is 0.",
+        "static.repositoryConfigUsed is false.",
+        "src/app.js has an outgoing import relationship to src/lib.js with specifier ./lib.js.",
+        "history.commitCount is 2. history.isComplete is true."
+      ],
+      "evidencePointers": [
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "lineCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "importCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "functionCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "classCount",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "repositoryConfigUsed",
+          "index": null
+        },
+        {
+          "source": "dependencies",
+          "field": "outgoing",
+          "index": 0
+        },
+        {
+          "source": "history",
+          "field": "commitCount",
+          "index": null
+        },
+        {
+          "source": "history",
+          "field": "isComplete",
+          "index": null
+        }
+      ],
+      "interpretation": [
+        "The file contains a rule violation regarding constant conditions, which may indicate a logical error in the code.",
+        "There is a self-comparison in the code, which is flagged as potentially pointless, suggesting a need for code review.",
+        "The file has a low complexity with only one import and no functions or classes defined, indicating it may be a simple module.",
+        "The absence of repository configuration suggests that the analysis may not reflect the intended coding standards or practices.",
+        "The file has an outgoing dependency on 'src/lib.js', indicating it relies on external code for functionality.",
+        "The complete Git history indicates that the file has undergone changes, allowing for tracking of its evolution over time."
+      ],
+      "limitations": [],
+      "cacheKey": "grounding-v1-experiment:experiment-file-proposed:gf-app-outgoing-dependency:src/app.js",
+      "evidenceGrounded": true,
+      "expectedEvidenceMatched": 1,
+      "expectedEvidenceTotal": 1
+    },
+    {
+      "runId": "run-1.0.0-gf-lib-incoming-dependency-baseline",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-lib-incoming-dependency",
+      "condition": "baseline",
+      "contextMode": "experiment-file-baseline",
+      "targetFile": "src/lib.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:22.166Z",
+      "outcome": "not-applicable"
+    },
+    {
+      "runId": "run-1.0.0-gf-lib-incoming-dependency-proposed",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-lib-incoming-dependency",
+      "condition": "proposed",
+      "contextMode": "experiment-file-proposed",
+      "targetFile": "src/lib.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:22.166Z",
+      "outcome": "failure",
+      "latencyMs": 3867,
+      "validationFailureCategory": "unsupported evidence pointer",
+      "cacheKey": "grounding-v1-experiment:experiment-file-proposed:gf-lib-incoming-dependency:src/lib.js"
+    },
+    {
+      "runId": "run-1.0.0-gf-unresolved-import-baseline",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-unresolved-import",
+      "condition": "baseline",
+      "contextMode": "experiment-file-baseline",
+      "targetFile": "src/unresolved.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:26.033Z",
+      "outcome": "not-applicable"
+    },
+    {
+      "runId": "run-1.0.0-gf-unresolved-import-proposed",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-unresolved-import",
+      "condition": "proposed",
+      "contextMode": "experiment-file-proposed",
+      "targetFile": "src/unresolved.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:26.033Z",
+      "outcome": "success",
+      "latencyMs": 4524,
+      "summary": "The repository 'grounding-v1' has a proposed file 'src/unresolved.js' with unresolved dependencies and no static findings or issues. The Git history is complete, but there is an unresolved import that needs attention.",
+      "factualObservations": [
+        "src/unresolved.js has an unresolved import import ./missing.js: Relative import did not resolve to a source file in the repository.",
+        "static.findingsTruncated is false. static.findingsTruncated is false.",
+        "ast.lineCount is 5. ast.functionCount is 1. ast.maxNestingDepth is 1.",
+        "repository.name is grounding-v1. repository.branch is main.",
+        "history.commitCount is 1. history.isComplete is true.",
+        "static.findingsTruncated is false. static.repositoryConfigUsed is false."
+      ],
+      "evidencePointers": [
+        {
+          "source": "dependencies",
+          "field": "unresolved",
+          "index": 0
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "lineCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "functionCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "maxNestingDepth",
+          "index": null
+        },
+        {
+          "source": "repository",
+          "field": "name",
+          "index": null
+        },
+        {
+          "source": "repository",
+          "field": "branch",
+          "index": null
+        },
+        {
+          "source": "history",
+          "field": "commitCount",
+          "index": null
+        },
+        {
+          "source": "history",
+          "field": "isComplete",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "repositoryConfigUsed",
+          "index": null
+        }
+      ],
+      "interpretation": [
+        "The file has an unresolved import that did not resolve to a source file in the repository, indicating a potential issue with module resolution.",
+        "No static findings or issues were detected in the file, suggesting that it adheres to the rules set by RepoGuard.",
+        "The file 'src/unresolved.js' contains one function and has a low complexity with a maximum nesting depth of 1.",
+        "The repository is hosted on GitHub and is currently on the 'main' branch, indicating a standard setup for version control.",
+        "The Git history for the file is complete with one commit, indicating that the file has been recently added or modified.",
+        "Static analysis coverage is complete as there are no truncated findings or issues reported."
+      ],
+      "limitations": [
+        "Some dependency references could not be resolved."
+      ],
+      "cacheKey": "grounding-v1-experiment:experiment-file-proposed:gf-unresolved-import:src/unresolved.js",
+      "evidenceGrounded": true,
+      "expectedEvidenceMatched": 1,
+      "expectedEvidenceTotal": 1
+    },
+    {
+      "runId": "run-1.0.0-gf-clean-no-static-findings-baseline",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-clean-no-static-findings",
+      "condition": "baseline",
+      "contextMode": "experiment-file-baseline",
+      "targetFile": "src/clean.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:30.558Z",
+      "outcome": "success",
+      "latencyMs": 2749,
+      "summary": "The analysis of the file 'src/clean.js' indicates it has a single export and no functions or classes defined. No static findings or issues were identified, and the repository configuration was not utilized during the analysis.",
+      "factualObservations": [
+        "ast.path is src/clean.js. ast.exportCount is 1. ast.functionCount is 0. ast.classCount is 0.",
+        "static.findingsTruncated is false. static.findingsTruncated is false. static.findingsTruncated is false.",
+        "static.repositoryConfigUsed is false."
+      ],
+      "evidencePointers": [
+        {
+          "source": "ast",
+          "field": "path",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "exportCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "functionCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "classCount",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "repositoryConfigUsed",
+          "index": null
+        }
+      ],
+      "interpretation": [
+        "The file contains a single export and no functions or classes, indicating it may serve a simple purpose.",
+        "No static findings or issues were detected in the file, suggesting it adheres to the defined rules.",
+        "The analysis did not utilize the repository's ESLint or CI configuration, which may affect the comprehensiveness of the findings."
+      ],
+      "limitations": [],
+      "cacheKey": "grounding-v1-experiment:experiment-file-baseline:gf-clean-no-static-findings:src/clean.js",
+      "evidenceGrounded": true,
+      "expectedEvidenceMatched": 0,
+      "expectedEvidenceTotal": 1
+    },
+    {
+      "runId": "run-1.0.0-gf-clean-no-static-findings-proposed",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-clean-no-static-findings",
+      "condition": "proposed",
+      "contextMode": "experiment-file-proposed",
+      "targetFile": "src/clean.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:33.308Z",
+      "outcome": "failure",
+      "latencyMs": 4464,
+      "validationFailureCategory": "unsupported evidence pointer",
+      "cacheKey": "grounding-v1-experiment:experiment-file-proposed:gf-clean-no-static-findings:src/clean.js"
+    },
+    {
+      "runId": "run-1.0.0-gf-lib-function-baseline",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-lib-function",
+      "condition": "baseline",
+      "contextMode": "experiment-file-baseline",
+      "targetFile": "src/lib.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:37.773Z",
+      "outcome": "success",
+      "latencyMs": 3108,
+      "summary": "The analysis of the file 'src/lib.js' indicates that it contains a single function and one export, with no static findings or issues detected.",
+      "factualObservations": [
+        "ast.functionCount is 1. ast.maxNestingDepth is 1. ast.functionsTruncated is false.",
+        "ast.exportCount is 1.",
+        "static.findingsTruncated is false. static.findingsTruncated is false.",
+        "static.repositoryConfigUsed is false.",
+        "ast.lineCount is 3.",
+        "ast.functionsTruncated is false. ast.functionsTruncated is false."
+      ],
+      "evidencePointers": [
+        {
+          "source": "ast",
+          "field": "functionCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "maxNestingDepth",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "functionsTruncated",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "exportCount",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "repositoryConfigUsed",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "lineCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "functionsTruncated",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "functionsTruncated",
+          "index": null
+        }
+      ],
+      "interpretation": [
+        "The file contains a single function named 'add' with a maximum nesting depth of 1.",
+        "The file exports one item, indicating it is designed to share functionality.",
+        "No static findings were detected in the file, indicating a clean analysis under the applied rules.",
+        "The repository's ESLint or CI configuration was not utilized during the analysis.",
+        "The file is relatively short, containing only 3 lines of code.",
+        "The 'add' function is the only function present in the file and is not truncated, indicating full visibility of its implementation."
+      ],
+      "limitations": [],
+      "cacheKey": "grounding-v1-experiment:experiment-file-baseline:gf-lib-function:src/lib.js",
+      "evidenceGrounded": true,
+      "expectedEvidenceMatched": 0,
+      "expectedEvidenceTotal": 1
+    },
+    {
+      "runId": "run-1.0.0-gf-lib-function-proposed",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-lib-function",
+      "condition": "proposed",
+      "contextMode": "experiment-file-proposed",
+      "targetFile": "src/lib.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:40.882Z",
+      "outcome": "failure",
+      "latencyMs": 3836,
+      "validationFailureCategory": "unsupported evidence pointer",
+      "cacheKey": "grounding-v1-experiment:experiment-file-proposed:gf-lib-function:src/lib.js"
+    },
+    {
+      "runId": "run-1.0.0-gf-app-history-baseline",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-app-history",
+      "condition": "baseline",
+      "contextMode": "experiment-file-baseline",
+      "targetFile": "src/app.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:44.719Z",
+      "outcome": "not-applicable"
+    },
+    {
+      "runId": "run-1.0.0-gf-app-history-proposed",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-app-history",
+      "condition": "proposed",
+      "contextMode": "experiment-file-proposed",
+      "targetFile": "src/app.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:44.719Z",
+      "outcome": "success",
+      "latencyMs": 4484,
+      "summary": "The analysis of the proposed file 'src/app.js' reveals several static findings related to code quality, and the file has a complete Git history.",
+      "factualObservations": [
+        "static.findingsTruncated is false. static.findingsTruncated is false. static.findingsTruncated is false.",
+        "static.findingsTruncated is false. static.findingsTruncated is false. static.findingsTruncated is false.",
+        "ast.lineCount is 8. ast.importCount is 1. ast.functionCount is 0.",
+        "repository.name is grounding-v1. repository.branch is main.",
+        "src/app.js has an outgoing import relationship to src/lib.js with specifier ./lib.js.",
+        "history.commitCount is 2. history.isComplete is true."
+      ],
+      "evidencePointers": [
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "lineCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "importCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "functionCount",
+          "index": null
+        },
+        {
+          "source": "repository",
+          "field": "name",
+          "index": null
+        },
+        {
+          "source": "repository",
+          "field": "branch",
+          "index": null
+        },
+        {
+          "source": "dependencies",
+          "field": "outgoing",
+          "index": 0
+        },
+        {
+          "source": "history",
+          "field": "commitCount",
+          "index": null
+        },
+        {
+          "source": "history",
+          "field": "isComplete",
+          "index": null
+        }
+      ],
+      "interpretation": [
+        "The code contains a constant condition that may lead to logical errors.",
+        "The code includes a self-comparison, which is likely unnecessary and could indicate a logic flaw.",
+        "The file has a low complexity with only one import and no functions or classes defined.",
+        "The repository is hosted on GitHub and is named 'grounding-v1', with the main branch currently in use.",
+        "The file 'src/app.js' has an outgoing dependency on 'src/lib.js', indicating a modular structure.",
+        "The file has a complete history with two commits, indicating active development and tracking of changes."
+      ],
+      "limitations": [],
+      "cacheKey": "grounding-v1-experiment:experiment-file-proposed:gf-app-history:src/app.js",
+      "evidenceGrounded": true,
+      "expectedEvidenceMatched": 0,
+      "expectedEvidenceTotal": 1
+    },
+    {
+      "runId": "run-1.0.0-gf-repository-identity-baseline",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-repository-identity",
+      "condition": "baseline",
+      "contextMode": "experiment-file-baseline",
+      "targetFile": "src/app.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:49.204Z",
+      "outcome": "not-applicable"
+    },
+    {
+      "runId": "run-1.0.0-gf-repository-identity-proposed",
+      "datasetVersion": "1.0.0",
+      "protocolVersion": "1.0.0",
+      "caseId": "gf-repository-identity",
+      "condition": "proposed",
+      "contextMode": "experiment-file-proposed",
+      "targetFile": "src/app.js",
+      "model": "gpt-4o-mini",
+      "timestamp": "2026-09-26T07:47:49.204Z",
+      "outcome": "success",
+      "latencyMs": 4355,
+      "summary": "The analysis of the file 'src/app.js' reveals several static findings related to code quality issues, with a complete Git history and no limitations noted.",
+      "factualObservations": [
+        "static.findingsTruncated is false. static.findingsTruncated is false. src/app.js has a no-constant-condition finding at line 3, column 5: Unexpected constant condition.",
+        "static.findingsTruncated is false. src/app.js has a no-self-compare finding at line 6, column 5: Comparing to itself is potentially pointless.",
+        "repository.name is grounding-v1. repository.sourceType is github.",
+        "ast.lineCount is 8. ast.importCount is 1. ast.functionCount is 0. ast.classCount is 0.",
+        "src/app.js has an outgoing import relationship to src/lib.js with specifier ./lib.js.",
+        "history.isComplete is true. history.commitCount is 2."
+      ],
+      "evidencePointers": [
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "finding",
+          "index": 0
+        },
+        {
+          "source": "static",
+          "field": "findingsTruncated",
+          "index": null
+        },
+        {
+          "source": "static",
+          "field": "finding",
+          "index": 1
+        },
+        {
+          "source": "repository",
+          "field": "name",
+          "index": null
+        },
+        {
+          "source": "repository",
+          "field": "sourceType",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "lineCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "importCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "functionCount",
+          "index": null
+        },
+        {
+          "source": "ast",
+          "field": "classCount",
+          "index": null
+        },
+        {
+          "source": "dependencies",
+          "field": "outgoing",
+          "index": 0
+        },
+        {
+          "source": "history",
+          "field": "isComplete",
+          "index": null
+        },
+        {
+          "source": "history",
+          "field": "commitCount",
+          "index": null
+        }
+      ],
+      "interpretation": [
+        "The presence of a constant condition indicates a potential logical error in the code.",
+        "The self-comparison in the code suggests a redundancy that may lead to confusion or errors.",
+        "The repository is hosted on GitHub and is named 'grounding-v1', indicating a specific project context.",
+        "The file 'src/app.js' has a low complexity with only one import and no functions or classes defined, suggesting it may be straightforward but potentially underdeveloped.",
+        "The file 'src/app.js' has an outgoing dependency on 'src/lib.js', indicating a reliance on external code for functionality.",
+        "The Git history for 'src/app.js' is complete, providing a full view of its changes and evolution over time."
+      ],
+      "limitations": [],
+      "cacheKey": "grounding-v1-experiment:experiment-file-proposed:gf-repository-identity:src/app.js",
+      "evidenceGrounded": true,
+      "expectedEvidenceMatched": 0,
+      "expectedEvidenceTotal": 1
+    }
+  ]
+}

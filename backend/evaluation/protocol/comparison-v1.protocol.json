@@ -1,0 +1,93 @@
+{
+  "protocolVersion": "1.0.0",
+  "datasetVersion": "1.0.0",
+  "fixtureId": "grounding-v1",
+  "status": "protocol-only",
+  "evaluationRuns": [],
+  "unitOfEvaluation": "One case is one target file plus one analytical question. A case is identified by caseId.",
+  "conditions": {
+    "baseline": {
+      "contextMode": "experiment-file-baseline",
+      "endpoint": "POST /api/analyses/:id/ai-summary/experiment/baseline",
+      "context": "File-local AST and file-local static evidence only."
+    },
+    "proposed": {
+      "contextMode": "experiment-file-proposed",
+      "endpoint": "POST /api/analyses/:id/ai-summary/experiment/proposed",
+      "context": "The same file-local evidence plus that file's dependency relationships, that file's Git history when present, and repository identity."
+    }
+  },
+  "sharedControls": [
+    "identical target file",
+    "identical file-local analyzer evidence",
+    "same model identifier",
+    "same temperature, token limit, timeout, and response schema",
+    "same validation rules and output bounds",
+    "factual observation text rendered from validated evidence pointers",
+    "interpretation kept in a separate labeled field"
+  ],
+  "intendedDifference": "Only the proposed context adds dependency relationships, file Git history, and repository identity.",
+  "runRecordSchema": {
+    "datasetVersion": "1.0.0",
+    "protocolVersion": "1.0.0",
+    "model": "server model id, not an API key",
+    "caseId": "string",
+    "targetFile": "string",
+    "contextMode": "experiment-file-baseline or experiment-file-proposed",
+    "timestamp": "ISO-8601",
+    "outcome": "success or failure",
+    "validationFailureCategory": "invalid JSON, schema mismatch, bounds violation, unsupported evidence pointer, provider refusal, empty response, timeout, or provider error. Omit on success.",
+    "factualObservations": "server-rendered observation strings when successful",
+    "evidencePointers": "validated pointers when successful",
+    "interpretation": "labeled interpretation text when successful",
+    "latencyMs": "number, recorded separately from quality"
+  },
+  "prohibitedRecordFields": ["apiKey", "workspacePath", "rawProviderCompletion", "sourceText"],
+  "metrics": [
+    {
+      "id": "evidence-grounding-validity",
+      "formula": "Among successful outputs, the fraction whose factual observation strings are exactly the server rendering of their validated evidence pointers.",
+      "notes": "Step 25 makes this a structural property of a successful response. The metric still counts only recorded runs. It is not a quality score by itself."
+    },
+    {
+      "id": "expected-evidence-coverage",
+      "formula": "For one case, matched expected evidence items divided by the number of expected evidence items. A static item matches when a surfaced finding observation has the same path, ruleId, and line. A dependency item matches when a surfaced relationship observation has the same relation, endpoints, kind, and specifier. A history item matches when the surfaced history observation states the same commitCount, additions, deletions, historyDepth, and isComplete. An absence item matches when the surfaced static evidence for that path states findingCount 0. A structural item matches when the surfaced function observation has the same name and line. A repository item matches when the surfaced identity observation has the same name, branch, and sourceType. Coverage is undefined for a condition that is not listed in availableIn.",
+      "notes": "Matching uses these fields. It does not use a text search of interpretation prose."
+    },
+    {
+      "id": "unsupported-evidence-rate",
+      "formula": "Attempted condition runs whose validation failure category is an unsupported evidence pointer, divided by attempted condition runs.",
+      "notes": "A schema, bounds, or provider failure is not counted in the numerator."
+    },
+    {
+      "id": "interpretation-agreement",
+      "formula": "Not computed in this protocol version. Interpretation labels are human-evaluation-required. An automatic model judge is not ground truth.",
+      "notes": "Do not fill this metric from the same model that produced the interpretation."
+    },
+    {
+      "id": "invalid-output-rate",
+      "formula": "Attempted condition runs with outcome failure, divided by attempted condition runs. Report the validation failure category counts separately.",
+      "notes": "Includes schema, bounds, unsupported pointer, and provider failures."
+    },
+    {
+      "id": "latency",
+      "formula": "Record latencyMs for each attempt. Do not treat latency as evidence quality, coverage, or correctness.",
+      "notes": "No latency threshold is a success criterion."
+    }
+  ],
+  "aggregateScore": null,
+  "metricWeights": null,
+  "humanEvaluation": {
+    "when": "Use this only for the labeled interpretation field. Do not use it to replace expected evidence labels.",
+    "blinding": "Hide whether a response came from baseline or proposed. Show the case id, target file, the factual observations, the evidence pointers, the interpretation, and the context that condition was allowed to see.",
+    "criteria": [
+      "relevance of the interpretation to the factual observations",
+      "whether the interpretation adds a repository fact that is not in the shown context",
+      "whether the interpretation stays distinct from the factual observation",
+      "usefulness of the interpretation for understanding the shown evidence"
+    ],
+    "scale": "Each criterion is rated separately. This protocol does not define a numeric scale or a combined score.",
+    "disagreement": "Two evaluators rate independently. They discuss disagreements on a criterion. If they still disagree, a third evaluator rates that criterion. There is no vote for which condition is better.",
+    "prohibitedQuestion": "Do not ask which system is better without using the criteria above."
+  }
+}

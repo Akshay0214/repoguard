@@ -1,0 +1,1350 @@
+[
+  {
+    "evaluationId": "EV-01",
+    "caseId": "gf-app-self-compare",
+    "targetFile": "src/app.js",
+    "factualObservations": [
+      "src/app.js has a no-constant-condition finding at line 3, column 5: Unexpected constant condition.",
+      "src/app.js has a no-self-compare finding at line 6, column 5: Comparing to itself is potentially pointless.",
+      "ast.lineCount is 8.",
+      "ast.functionCount is 0.",
+      "ast.importCount is 1.",
+      "static.repositoryConfigUsed is false."
+    ],
+    "evidencePointers": [
+      {
+        "source": "static",
+        "field": "finding",
+        "index": 0
+      },
+      {
+        "source": "static",
+        "field": "finding",
+        "index": 1
+      },
+      {
+        "source": "ast",
+        "field": "lineCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "functionCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "importCount",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "repositoryConfigUsed",
+        "index": null
+      }
+    ],
+    "interpretation": [
+      "The presence of a constant condition in the code may lead to logical errors during execution.",
+      "The self-comparison in the code suggests a potential oversight that could lead to unnecessary complexity or confusion.",
+      "The file 'src/app.js' has a total of 8 lines of code, indicating a relatively small size.",
+      "There are no functions defined in 'src/app.js', which may indicate that the file is primarily for configuration or setup purposes.",
+      "The file imports one module, which may suggest a dependency on external functionality.",
+      "The repository's ESLint configuration was not utilized during the analysis, which may affect the comprehensiveness of the findings."
+    ],
+    "allowedContext": {
+      "file": {
+        "path": "src/app.js",
+        "truncated": false,
+        "ast": {
+          "lineCount": 8,
+          "functionCount": 0,
+          "classCount": 0,
+          "importCount": 1,
+          "exportCount": 0,
+          "maxNestingDepth": 1,
+          "functions": [],
+          "functionsTruncated": false
+        },
+        "static": {
+          "repositoryConfigUsed": false,
+          "ruleSet": "repoguard-fixed",
+          "findingsTruncated": false,
+          "findings": [
+            {
+              "path": "src/app.js",
+              "line": 3,
+              "column": 5,
+              "ruleId": "no-constant-condition",
+              "severity": "error",
+              "message": "Unexpected constant condition.",
+              "tool": "eslint",
+              "category": "problem"
+            },
+            {
+              "path": "src/app.js",
+              "line": 6,
+              "column": 5,
+              "ruleId": "no-self-compare",
+              "severity": "error",
+              "message": "Comparing to itself is potentially pointless.",
+              "tool": "eslint",
+              "category": "problem"
+            }
+          ],
+          "issues": []
+        }
+      },
+      "limitations": []
+    }
+  },
+  {
+    "evaluationId": "EV-02",
+    "caseId": "gf-repository-identity",
+    "targetFile": "src/app.js",
+    "factualObservations": [
+      "static.findingsTruncated is false. static.findingsTruncated is false. src/app.js has a no-constant-condition finding at line 3, column 5: Unexpected constant condition.",
+      "static.findingsTruncated is false. src/app.js has a no-self-compare finding at line 6, column 5: Comparing to itself is potentially pointless.",
+      "repository.name is grounding-v1. repository.sourceType is github.",
+      "ast.lineCount is 8. ast.importCount is 1. ast.functionCount is 0. ast.classCount is 0.",
+      "src/app.js has an outgoing import relationship to src/lib.js with specifier ./lib.js.",
+      "history.isComplete is true. history.commitCount is 2."
+    ],
+    "evidencePointers": [
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "finding",
+        "index": 0
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "finding",
+        "index": 1
+      },
+      {
+        "source": "repository",
+        "field": "name",
+        "index": null
+      },
+      {
+        "source": "repository",
+        "field": "sourceType",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "lineCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "importCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "functionCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "classCount",
+        "index": null
+      },
+      {
+        "source": "dependencies",
+        "field": "outgoing",
+        "index": 0
+      },
+      {
+        "source": "history",
+        "field": "isComplete",
+        "index": null
+      },
+      {
+        "source": "history",
+        "field": "commitCount",
+        "index": null
+      }
+    ],
+    "interpretation": [
+      "The presence of a constant condition indicates a potential logical error in the code.",
+      "The self-comparison in the code suggests a redundancy that may lead to confusion or errors.",
+      "The repository is hosted on GitHub and is named 'grounding-v1', indicating a specific project context.",
+      "The file 'src/app.js' has a low complexity with only one import and no functions or classes defined, suggesting it may be straightforward but potentially underdeveloped.",
+      "The file 'src/app.js' has an outgoing dependency on 'src/lib.js', indicating a reliance on external code for functionality.",
+      "The Git history for 'src/app.js' is complete, providing a full view of its changes and evolution over time."
+    ],
+    "allowedContext": {
+      "file": {
+        "path": "src/app.js",
+        "truncated": false,
+        "ast": {
+          "lineCount": 8,
+          "functionCount": 0,
+          "classCount": 0,
+          "importCount": 1,
+          "exportCount": 0,
+          "maxNestingDepth": 1,
+          "functions": [],
+          "functionsTruncated": false
+        },
+        "static": {
+          "repositoryConfigUsed": false,
+          "ruleSet": "repoguard-fixed",
+          "findingsTruncated": false,
+          "findings": [
+            {
+              "path": "src/app.js",
+              "line": 3,
+              "column": 5,
+              "ruleId": "no-constant-condition",
+              "severity": "error",
+              "message": "Unexpected constant condition.",
+              "tool": "eslint",
+              "category": "problem"
+            },
+            {
+              "path": "src/app.js",
+              "line": 6,
+              "column": 5,
+              "ruleId": "no-self-compare",
+              "severity": "error",
+              "message": "Comparing to itself is potentially pointless.",
+              "tool": "eslint",
+              "category": "problem"
+            }
+          ],
+          "issues": []
+        }
+      },
+      "repository": {
+        "name": "grounding-v1",
+        "branch": "main",
+        "sourceType": "github"
+      },
+      "dependencies": {
+        "outgoing": [
+          {
+            "path": "src/lib.js",
+            "kind": "import",
+            "importSpecifier": "./lib.js"
+          }
+        ],
+        "incoming": [],
+        "external": [],
+        "unresolved": [],
+        "truncated": false
+      },
+      "history": {
+        "commitCount": 2,
+        "additions": 8,
+        "deletions": 0,
+        "changeCount": 8,
+        "firstSeenAt": "2026-09-26T07:47:01.000Z",
+        "lastChangedAt": "2026-09-26T07:47:01.000Z",
+        "renamedFrom": null,
+        "presentInWorkTree": true,
+        "historyDepth": "complete",
+        "isComplete": true
+      },
+      "limitations": []
+    }
+  },
+  {
+    "evaluationId": "EV-03",
+    "caseId": "gf-app-constant-condition",
+    "targetFile": "src/app.js",
+    "factualObservations": [
+      "src/app.js has a no-constant-condition finding at line 3, column 5: Unexpected constant condition. ast.path is src/app.js.",
+      "src/app.js has a no-self-compare finding at line 6, column 5: Comparing to itself is potentially pointless. ast.path is src/app.js.",
+      "ast.importCount is 1. ast.exportCount is 0.",
+      "ast.maxNestingDepth is 1.",
+      "static.repositoryConfigUsed is false.",
+      "ast.functionCount is 0. ast.classCount is 0."
+    ],
+    "evidencePointers": [
+      {
+        "source": "static",
+        "field": "finding",
+        "index": 0
+      },
+      {
+        "source": "ast",
+        "field": "path",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "finding",
+        "index": 1
+      },
+      {
+        "source": "ast",
+        "field": "path",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "importCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "exportCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "maxNestingDepth",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "repositoryConfigUsed",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "functionCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "classCount",
+        "index": null
+      }
+    ],
+    "interpretation": [
+      "The presence of a constant condition may indicate a logical error in the code.",
+      "Self-comparison in code can lead to unnecessary complexity and potential bugs.",
+      "The file contains a single import statement and no exports, indicating limited interaction with other modules.",
+      "The file has a low complexity with a maximum nesting depth of 1, suggesting straightforward logic.",
+      "No repository configuration was applied, which may affect the comprehensiveness of the findings.",
+      "The file does not contain any functions or classes, indicating it may serve a simple purpose or be incomplete."
+    ],
+    "allowedContext": {
+      "file": {
+        "path": "src/app.js",
+        "truncated": false,
+        "ast": {
+          "lineCount": 8,
+          "functionCount": 0,
+          "classCount": 0,
+          "importCount": 1,
+          "exportCount": 0,
+          "maxNestingDepth": 1,
+          "functions": [],
+          "functionsTruncated": false
+        },
+        "static": {
+          "repositoryConfigUsed": false,
+          "ruleSet": "repoguard-fixed",
+          "findingsTruncated": false,
+          "findings": [
+            {
+              "path": "src/app.js",
+              "line": 3,
+              "column": 5,
+              "ruleId": "no-constant-condition",
+              "severity": "error",
+              "message": "Unexpected constant condition.",
+              "tool": "eslint",
+              "category": "problem"
+            },
+            {
+              "path": "src/app.js",
+              "line": 6,
+              "column": 5,
+              "ruleId": "no-self-compare",
+              "severity": "error",
+              "message": "Comparing to itself is potentially pointless.",
+              "tool": "eslint",
+              "category": "problem"
+            }
+          ],
+          "issues": []
+        }
+      },
+      "limitations": []
+    }
+  },
+  {
+    "evaluationId": "EV-04",
+    "caseId": "gf-app-outgoing-dependency",
+    "targetFile": "src/app.js",
+    "factualObservations": [
+      "static.findingsTruncated is false. static.findingsTruncated is false.",
+      "static.findingsTruncated is false. static.findingsTruncated is false.",
+      "ast.lineCount is 8. ast.importCount is 1. ast.functionCount is 0. ast.classCount is 0.",
+      "static.repositoryConfigUsed is false.",
+      "src/app.js has an outgoing import relationship to src/lib.js with specifier ./lib.js.",
+      "history.commitCount is 2. history.isComplete is true."
+    ],
+    "evidencePointers": [
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "lineCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "importCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "functionCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "classCount",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "repositoryConfigUsed",
+        "index": null
+      },
+      {
+        "source": "dependencies",
+        "field": "outgoing",
+        "index": 0
+      },
+      {
+        "source": "history",
+        "field": "commitCount",
+        "index": null
+      },
+      {
+        "source": "history",
+        "field": "isComplete",
+        "index": null
+      }
+    ],
+    "interpretation": [
+      "The file contains a rule violation regarding constant conditions, which may indicate a logical error in the code.",
+      "There is a self-comparison in the code, which is flagged as potentially pointless, suggesting a need for code review.",
+      "The file has a low complexity with only one import and no functions or classes defined, indicating it may be a simple module.",
+      "The absence of repository configuration suggests that the analysis may not reflect the intended coding standards or practices.",
+      "The file has an outgoing dependency on 'src/lib.js', indicating it relies on external code for functionality.",
+      "The complete Git history indicates that the file has undergone changes, allowing for tracking of its evolution over time."
+    ],
+    "allowedContext": {
+      "file": {
+        "path": "src/app.js",
+        "truncated": false,
+        "ast": {
+          "lineCount": 8,
+          "functionCount": 0,
+          "classCount": 0,
+          "importCount": 1,
+          "exportCount": 0,
+          "maxNestingDepth": 1,
+          "functions": [],
+          "functionsTruncated": false
+        },
+        "static": {
+          "repositoryConfigUsed": false,
+          "ruleSet": "repoguard-fixed",
+          "findingsTruncated": false,
+          "findings": [
+            {
+              "path": "src/app.js",
+              "line": 3,
+              "column": 5,
+              "ruleId": "no-constant-condition",
+              "severity": "error",
+              "message": "Unexpected constant condition.",
+              "tool": "eslint",
+              "category": "problem"
+            },
+            {
+              "path": "src/app.js",
+              "line": 6,
+              "column": 5,
+              "ruleId": "no-self-compare",
+              "severity": "error",
+              "message": "Comparing to itself is potentially pointless.",
+              "tool": "eslint",
+              "category": "problem"
+            }
+          ],
+          "issues": []
+        }
+      },
+      "repository": {
+        "name": "grounding-v1",
+        "branch": "main",
+        "sourceType": "github"
+      },
+      "dependencies": {
+        "outgoing": [
+          {
+            "path": "src/lib.js",
+            "kind": "import",
+            "importSpecifier": "./lib.js"
+          }
+        ],
+        "incoming": [],
+        "external": [],
+        "unresolved": [],
+        "truncated": false
+      },
+      "history": {
+        "commitCount": 2,
+        "additions": 8,
+        "deletions": 0,
+        "changeCount": 8,
+        "firstSeenAt": "2026-09-26T07:47:01.000Z",
+        "lastChangedAt": "2026-09-26T07:47:01.000Z",
+        "renamedFrom": null,
+        "presentInWorkTree": true,
+        "historyDepth": "complete",
+        "isComplete": true
+      },
+      "limitations": []
+    }
+  },
+  {
+    "evaluationId": "EV-05",
+    "caseId": "gf-unresolved-import",
+    "targetFile": "src/unresolved.js",
+    "factualObservations": [
+      "src/unresolved.js has an unresolved import import ./missing.js: Relative import did not resolve to a source file in the repository.",
+      "static.findingsTruncated is false. static.findingsTruncated is false.",
+      "ast.lineCount is 5. ast.functionCount is 1. ast.maxNestingDepth is 1.",
+      "repository.name is grounding-v1. repository.branch is main.",
+      "history.commitCount is 1. history.isComplete is true.",
+      "static.findingsTruncated is false. static.repositoryConfigUsed is false."
+    ],
+    "evidencePointers": [
+      {
+        "source": "dependencies",
+        "field": "unresolved",
+        "index": 0
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "lineCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "functionCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "maxNestingDepth",
+        "index": null
+      },
+      {
+        "source": "repository",
+        "field": "name",
+        "index": null
+      },
+      {
+        "source": "repository",
+        "field": "branch",
+        "index": null
+      },
+      {
+        "source": "history",
+        "field": "commitCount",
+        "index": null
+      },
+      {
+        "source": "history",
+        "field": "isComplete",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "repositoryConfigUsed",
+        "index": null
+      }
+    ],
+    "interpretation": [
+      "The file has an unresolved import that did not resolve to a source file in the repository, indicating a potential issue with module resolution.",
+      "No static findings or issues were detected in the file, suggesting that it adheres to the rules set by RepoGuard.",
+      "The file 'src/unresolved.js' contains one function and has a low complexity with a maximum nesting depth of 1.",
+      "The repository is hosted on GitHub and is currently on the 'main' branch, indicating a standard setup for version control.",
+      "The Git history for the file is complete with one commit, indicating that the file has been recently added or modified.",
+      "Static analysis coverage is complete as there are no truncated findings or issues reported."
+    ],
+    "allowedContext": {
+      "file": {
+        "path": "src/unresolved.js",
+        "truncated": false,
+        "ast": {
+          "lineCount": 5,
+          "functionCount": 1,
+          "classCount": 0,
+          "importCount": 1,
+          "exportCount": 1,
+          "maxNestingDepth": 1,
+          "functions": [
+            {
+              "name": "readMissing",
+              "line": 3,
+              "nestingDepth": 1
+            }
+          ],
+          "functionsTruncated": false
+        },
+        "static": {
+          "repositoryConfigUsed": false,
+          "ruleSet": "repoguard-fixed",
+          "findingsTruncated": false,
+          "findings": [],
+          "issues": []
+        }
+      },
+      "repository": {
+        "name": "grounding-v1",
+        "branch": "main",
+        "sourceType": "github"
+      },
+      "dependencies": {
+        "outgoing": [],
+        "incoming": [],
+        "external": [],
+        "unresolved": [
+          {
+            "importSpecifier": "./missing.js",
+            "kind": "import",
+            "message": "Relative import did not resolve to a source file in the repository."
+          }
+        ],
+        "truncated": false
+      },
+      "history": {
+        "commitCount": 1,
+        "additions": 5,
+        "deletions": 0,
+        "changeCount": 5,
+        "firstSeenAt": "2026-09-26T07:47:01.000Z",
+        "lastChangedAt": "2026-09-26T07:47:01.000Z",
+        "renamedFrom": null,
+        "presentInWorkTree": true,
+        "historyDepth": "complete",
+        "isComplete": true
+      },
+      "limitations": []
+    }
+  },
+  {
+    "evaluationId": "EV-06",
+    "caseId": "gf-app-self-compare",
+    "targetFile": "src/app.js",
+    "factualObservations": [
+      "static.findingsTruncated is false. static.findingsTruncated is false. src/app.js has a no-constant-condition finding at line 3, column 5: Unexpected constant condition.",
+      "static.findingsTruncated is false. src/app.js has a no-self-compare finding at line 6, column 5: Comparing to itself is potentially pointless.",
+      "ast.importCount is 1. ast.exportCount is 0.",
+      "repository.name is grounding-v1. repository.branch is main. history.isComplete is true.",
+      "src/app.js has an outgoing import relationship to src/lib.js with specifier ./lib.js.",
+      "ast.maxNestingDepth is 1."
+    ],
+    "evidencePointers": [
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "finding",
+        "index": 0
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "finding",
+        "index": 1
+      },
+      {
+        "source": "ast",
+        "field": "importCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "exportCount",
+        "index": null
+      },
+      {
+        "source": "repository",
+        "field": "name",
+        "index": null
+      },
+      {
+        "source": "repository",
+        "field": "branch",
+        "index": null
+      },
+      {
+        "source": "history",
+        "field": "isComplete",
+        "index": null
+      },
+      {
+        "source": "dependencies",
+        "field": "outgoing",
+        "index": 0
+      },
+      {
+        "source": "ast",
+        "field": "maxNestingDepth",
+        "index": null
+      }
+    ],
+    "interpretation": [
+      "The presence of a constant condition indicates a potential logical error in the code.",
+      "The self-comparison in the code suggests a possible oversight that may lead to unnecessary operations.",
+      "The file contains a single import statement and no exports, indicating a potential utility or helper role.",
+      "The repository is hosted on GitHub and is actively maintained, as indicated by its complete history.",
+      "The file has an outgoing dependency on 'src/lib.js', suggesting it relies on external functionality.",
+      "The file has a low complexity with a maximum nesting depth of 1, which may indicate simplicity in logic."
+    ],
+    "allowedContext": {
+      "file": {
+        "path": "src/app.js",
+        "truncated": false,
+        "ast": {
+          "lineCount": 8,
+          "functionCount": 0,
+          "classCount": 0,
+          "importCount": 1,
+          "exportCount": 0,
+          "maxNestingDepth": 1,
+          "functions": [],
+          "functionsTruncated": false
+        },
+        "static": {
+          "repositoryConfigUsed": false,
+          "ruleSet": "repoguard-fixed",
+          "findingsTruncated": false,
+          "findings": [
+            {
+              "path": "src/app.js",
+              "line": 3,
+              "column": 5,
+              "ruleId": "no-constant-condition",
+              "severity": "error",
+              "message": "Unexpected constant condition.",
+              "tool": "eslint",
+              "category": "problem"
+            },
+            {
+              "path": "src/app.js",
+              "line": 6,
+              "column": 5,
+              "ruleId": "no-self-compare",
+              "severity": "error",
+              "message": "Comparing to itself is potentially pointless.",
+              "tool": "eslint",
+              "category": "problem"
+            }
+          ],
+          "issues": []
+        }
+      },
+      "repository": {
+        "name": "grounding-v1",
+        "branch": "main",
+        "sourceType": "github"
+      },
+      "dependencies": {
+        "outgoing": [
+          {
+            "path": "src/lib.js",
+            "kind": "import",
+            "importSpecifier": "./lib.js"
+          }
+        ],
+        "incoming": [],
+        "external": [],
+        "unresolved": [],
+        "truncated": false
+      },
+      "history": {
+        "commitCount": 2,
+        "additions": 8,
+        "deletions": 0,
+        "changeCount": 8,
+        "firstSeenAt": "2026-09-26T07:47:01.000Z",
+        "lastChangedAt": "2026-09-26T07:47:01.000Z",
+        "renamedFrom": null,
+        "presentInWorkTree": true,
+        "historyDepth": "complete",
+        "isComplete": true
+      },
+      "limitations": []
+    }
+  },
+  {
+    "evaluationId": "EV-07",
+    "caseId": "gf-app-history",
+    "targetFile": "src/app.js",
+    "factualObservations": [
+      "static.findingsTruncated is false. static.findingsTruncated is false. static.findingsTruncated is false.",
+      "static.findingsTruncated is false. static.findingsTruncated is false. static.findingsTruncated is false.",
+      "ast.lineCount is 8. ast.importCount is 1. ast.functionCount is 0.",
+      "repository.name is grounding-v1. repository.branch is main.",
+      "src/app.js has an outgoing import relationship to src/lib.js with specifier ./lib.js.",
+      "history.commitCount is 2. history.isComplete is true."
+    ],
+    "evidencePointers": [
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "lineCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "importCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "functionCount",
+        "index": null
+      },
+      {
+        "source": "repository",
+        "field": "name",
+        "index": null
+      },
+      {
+        "source": "repository",
+        "field": "branch",
+        "index": null
+      },
+      {
+        "source": "dependencies",
+        "field": "outgoing",
+        "index": 0
+      },
+      {
+        "source": "history",
+        "field": "commitCount",
+        "index": null
+      },
+      {
+        "source": "history",
+        "field": "isComplete",
+        "index": null
+      }
+    ],
+    "interpretation": [
+      "The code contains a constant condition that may lead to logical errors.",
+      "The code includes a self-comparison, which is likely unnecessary and could indicate a logic flaw.",
+      "The file has a low complexity with only one import and no functions or classes defined.",
+      "The repository is hosted on GitHub and is named 'grounding-v1', with the main branch currently in use.",
+      "The file 'src/app.js' has an outgoing dependency on 'src/lib.js', indicating a modular structure.",
+      "The file has a complete history with two commits, indicating active development and tracking of changes."
+    ],
+    "allowedContext": {
+      "file": {
+        "path": "src/app.js",
+        "truncated": false,
+        "ast": {
+          "lineCount": 8,
+          "functionCount": 0,
+          "classCount": 0,
+          "importCount": 1,
+          "exportCount": 0,
+          "maxNestingDepth": 1,
+          "functions": [],
+          "functionsTruncated": false
+        },
+        "static": {
+          "repositoryConfigUsed": false,
+          "ruleSet": "repoguard-fixed",
+          "findingsTruncated": false,
+          "findings": [
+            {
+              "path": "src/app.js",
+              "line": 3,
+              "column": 5,
+              "ruleId": "no-constant-condition",
+              "severity": "error",
+              "message": "Unexpected constant condition.",
+              "tool": "eslint",
+              "category": "problem"
+            },
+            {
+              "path": "src/app.js",
+              "line": 6,
+              "column": 5,
+              "ruleId": "no-self-compare",
+              "severity": "error",
+              "message": "Comparing to itself is potentially pointless.",
+              "tool": "eslint",
+              "category": "problem"
+            }
+          ],
+          "issues": []
+        }
+      },
+      "repository": {
+        "name": "grounding-v1",
+        "branch": "main",
+        "sourceType": "github"
+      },
+      "dependencies": {
+        "outgoing": [
+          {
+            "path": "src/lib.js",
+            "kind": "import",
+            "importSpecifier": "./lib.js"
+          }
+        ],
+        "incoming": [],
+        "external": [],
+        "unresolved": [],
+        "truncated": false
+      },
+      "history": {
+        "commitCount": 2,
+        "additions": 8,
+        "deletions": 0,
+        "changeCount": 8,
+        "firstSeenAt": "2026-09-26T07:47:01.000Z",
+        "lastChangedAt": "2026-09-26T07:47:01.000Z",
+        "renamedFrom": null,
+        "presentInWorkTree": true,
+        "historyDepth": "complete",
+        "isComplete": true
+      },
+      "limitations": []
+    }
+  },
+  {
+    "evaluationId": "EV-08",
+    "caseId": "gf-lib-function",
+    "targetFile": "src/lib.js",
+    "factualObservations": [
+      "ast.functionCount is 1. ast.maxNestingDepth is 1. ast.functionsTruncated is false.",
+      "ast.exportCount is 1.",
+      "static.findingsTruncated is false. static.findingsTruncated is false.",
+      "static.repositoryConfigUsed is false.",
+      "ast.lineCount is 3.",
+      "ast.functionsTruncated is false. ast.functionsTruncated is false."
+    ],
+    "evidencePointers": [
+      {
+        "source": "ast",
+        "field": "functionCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "maxNestingDepth",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "functionsTruncated",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "exportCount",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "repositoryConfigUsed",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "lineCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "functionsTruncated",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "functionsTruncated",
+        "index": null
+      }
+    ],
+    "interpretation": [
+      "The file contains a single function named 'add' with a maximum nesting depth of 1.",
+      "The file exports one item, indicating it is designed to share functionality.",
+      "No static findings were detected in the file, indicating a clean analysis under the applied rules.",
+      "The repository's ESLint or CI configuration was not utilized during the analysis.",
+      "The file is relatively short, containing only 3 lines of code.",
+      "The 'add' function is the only function present in the file and is not truncated, indicating full visibility of its implementation."
+    ],
+    "allowedContext": {
+      "file": {
+        "path": "src/lib.js",
+        "truncated": false,
+        "ast": {
+          "lineCount": 3,
+          "functionCount": 1,
+          "classCount": 0,
+          "importCount": 0,
+          "exportCount": 1,
+          "maxNestingDepth": 1,
+          "functions": [
+            {
+              "name": "add",
+              "line": 1,
+              "nestingDepth": 1
+            }
+          ],
+          "functionsTruncated": false
+        },
+        "static": {
+          "repositoryConfigUsed": false,
+          "ruleSet": "repoguard-fixed",
+          "findingsTruncated": false,
+          "findings": [],
+          "issues": []
+        }
+      },
+      "limitations": []
+    }
+  },
+  {
+    "evaluationId": "EV-09",
+    "caseId": "gf-clean-no-static-findings",
+    "targetFile": "src/clean.js",
+    "factualObservations": [
+      "ast.path is src/clean.js. ast.exportCount is 1. ast.functionCount is 0. ast.classCount is 0.",
+      "static.findingsTruncated is false. static.findingsTruncated is false. static.findingsTruncated is false.",
+      "static.repositoryConfigUsed is false."
+    ],
+    "evidencePointers": [
+      {
+        "source": "ast",
+        "field": "path",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "exportCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "functionCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "classCount",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "repositoryConfigUsed",
+        "index": null
+      }
+    ],
+    "interpretation": [
+      "The file contains a single export and no functions or classes, indicating it may serve a simple purpose.",
+      "No static findings or issues were detected in the file, suggesting it adheres to the defined rules.",
+      "The analysis did not utilize the repository's ESLint or CI configuration, which may affect the comprehensiveness of the findings."
+    ],
+    "allowedContext": {
+      "file": {
+        "path": "src/clean.js",
+        "truncated": false,
+        "ast": {
+          "lineCount": 1,
+          "functionCount": 0,
+          "classCount": 0,
+          "importCount": 0,
+          "exportCount": 1,
+          "maxNestingDepth": 0,
+          "functions": [],
+          "functionsTruncated": false
+        },
+        "static": {
+          "repositoryConfigUsed": false,
+          "ruleSet": "repoguard-fixed",
+          "findingsTruncated": false,
+          "findings": [],
+          "issues": []
+        }
+      },
+      "limitations": []
+    }
+  },
+  {
+    "evaluationId": "EV-10",
+    "caseId": "gf-app-constant-condition",
+    "targetFile": "src/app.js",
+    "factualObservations": [
+      "static.findingsTruncated is false. static.findingsTruncated is false. src/app.js has a no-constant-condition finding at line 3, column 5: Unexpected constant condition.",
+      "static.findingsTruncated is false. src/app.js has a no-self-compare finding at line 6, column 5: Comparing to itself is potentially pointless.",
+      "ast.lineCount is 8.",
+      "ast.importCount is 1.",
+      "repository.name is grounding-v1. repository.branch is main.",
+      "history.commitCount is 2. history.isComplete is true."
+    ],
+    "evidencePointers": [
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "finding",
+        "index": 0
+      },
+      {
+        "source": "static",
+        "field": "findingsTruncated",
+        "index": null
+      },
+      {
+        "source": "static",
+        "field": "finding",
+        "index": 1
+      },
+      {
+        "source": "ast",
+        "field": "lineCount",
+        "index": null
+      },
+      {
+        "source": "ast",
+        "field": "importCount",
+        "index": null
+      },
+      {
+        "source": "repository",
+        "field": "name",
+        "index": null
+      },
+      {
+        "source": "repository",
+        "field": "branch",
+        "index": null
+      },
+      {
+        "source": "history",
+        "field": "commitCount",
+        "index": null
+      },
+      {
+        "source": "history",
+        "field": "isComplete",
+        "index": null
+      }
+    ],
+    "interpretation": [
+      "The file contains a finding related to a constant condition, which may indicate a logical error in the code.",
+      "The file contains a finding regarding a self-comparison, suggesting that the comparison may not be meaningful or necessary.",
+      "The file has a total of 8 lines of code, indicating a relatively small size.",
+      "The file includes 1 import statement, which may indicate a dependency on another module.",
+      "The repository is hosted on GitHub and is currently on the main branch, indicating it is likely the primary development branch.",
+      "The file has a complete history with 2 commits, suggesting that it has been tracked and modified over time."
+    ],
+    "allowedContext": {
+      "file": {
+        "path": "src/app.js",
+        "truncated": false,
+        "ast": {
+          "lineCount": 8,
+          "functionCount": 0,
+          "classCount": 0,
+          "importCount": 1,
+          "exportCount": 0,
+          "maxNestingDepth": 1,
+          "functions": [],
+          "functionsTruncated": false
+        },
+        "static": {
+          "repositoryConfigUsed": false,
+          "ruleSet": "repoguard-fixed",
+          "findingsTruncated": false,
+          "findings": [
+            {
+              "path": "src/app.js",
+              "line": 3,
+              "column": 5,
+              "ruleId": "no-constant-condition",
+              "severity": "error",
+              "message": "Unexpected constant condition.",
+              "tool": "eslint",
+              "category": "problem"
+            },
+            {
+              "path": "src/app.js",
+              "line": 6,
+              "column": 5,
+              "ruleId": "no-self-compare",
+              "severity": "error",
+              "message": "Comparing to itself is potentially pointless.",
+              "tool": "eslint",
+              "category": "problem"
+            }
+          ],
+          "issues": []
+        }
+      },
+      "repository": {
+        "name": "grounding-v1",
+        "branch": "main",
+        "sourceType": "github"
+      },
+      "dependencies": {
+        "outgoing": [
+          {
+            "path": "src/lib.js",
+            "kind": "import",
+            "importSpecifier": "./lib.js"
+          }
+        ],
+        "incoming": [],
+        "external": [],
+        "unresolved": [],
+        "truncated": false
+      },
+      "history": {
+        "commitCount": 2,
+        "additions": 8,
+        "deletions": 0,
+        "changeCount": 8,
+        "firstSeenAt": "2026-09-26T07:47:01.000Z",
+        "lastChangedAt": "2026-09-26T07:47:01.000Z",
+        "renamedFrom": null,
+        "presentInWorkTree": true,
+        "historyDepth": "complete",
+        "isComplete": true
+      },
+      "limitations": []
+    }
+  }
+]

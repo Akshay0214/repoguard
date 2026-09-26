@@ -1,0 +1,62 @@
+[
+  {
+    "evaluationId": "EV-01",
+    "runId": "run-1.0.0-gf-app-self-compare-baseline",
+    "caseId": "gf-app-self-compare",
+    "condition": "baseline"
+  },
+  {
+    "evaluationId": "EV-02",
+    "runId": "run-1.0.0-gf-repository-identity-proposed",
+    "caseId": "gf-repository-identity",
+    "condition": "proposed"
+  },
+  {
+    "evaluationId": "EV-03",
+    "runId": "run-1.0.0-gf-app-constant-condition-baseline",
+    "caseId": "gf-app-constant-condition",
+    "condition": "baseline"
+  },
+  {
+    "evaluationId": "EV-04",
+    "runId": "run-1.0.0-gf-app-outgoing-dependency-proposed",
+    "caseId": "gf-app-outgoing-dependency",
+    "condition": "proposed"
+  },
+  {
+    "evaluationId": "EV-05",
+    "runId": "run-1.0.0-gf-unresolved-import-proposed",
+    "caseId": "gf-unresolved-import",
+    "condition": "proposed"
+  },
+  {
+    "evaluationId": "EV-06",
+    "runId": "run-1.0.0-gf-app-self-compare-proposed",
+    "caseId": "gf-app-self-compare",
+    "condition": "proposed"
+  },
+  {
+    "evaluationId": "EV-07",
+    "runId": "run-1.0.0-gf-app-history-proposed",
+    "caseId": "gf-app-history",
+    "condition": "proposed"
+  },
+  {
+    "evaluationId": "EV-08",
+    "runId": "run-1.0.0-gf-lib-function-baseline",
+    "caseId": "gf-lib-function",
+    "condition": "baseline"
+  },
+  {
+    "evaluationId": "EV-09",
+    "runId": "run-1.0.0-gf-clean-no-static-findings-baseline",
+    "caseId": "gf-clean-no-static-findings",
+    "condition": "baseline"
+  },
+  {
+    "evaluationId": "EV-10",
+    "runId": "run-1.0.0-gf-app-constant-condition-proposed",
+    "caseId": "gf-app-constant-condition",
+    "condition": "proposed"
+  }
+]

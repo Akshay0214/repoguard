@@ -1,0 +1,15 @@
+{
+  "fixtureId": "grounding-v1",
+  "datasetVersion": "1.0.0",
+  "purpose": "Deterministic source and Git history for evaluation cases. This file does not contain model output.",
+  "steps": [
+    "Create an empty directory and copy src/lib.js, src/clean.js, and src/unresolved.js from this fixture.",
+    "Write versions/app.initial.js to src/app.js.",
+    "Run git init with core.autocrlf left false for the commands (git -c core.autocrlf=false).",
+    "Commit every file with message 'add initial files'.",
+    "Replace src/app.js with the fixture's final src/app.js.",
+    "Commit that change with message 'record self-compare in app'.",
+    "Pass repository identity name grounding-v1, branch main, and sourceType github into context construction. That identity is harness input, not a value read from an external host."
+  ],
+  "whyThisFixture": "A large external repository does not provide independently authored labels. These files state the import, the constant condition, the self-comparison, the missing relative import, and the clean export directly."
+}
