@@ -8,35 +8,96 @@ import type { ExperimentAiResponse } from '../types/ai.js';
 import { interpretAcquiredContext, LlmError, readAiConfig, requireAiConfig } from '../services/llmService.js';
 import { analyzeAcquiredStatic, StaticAnalysisUnavailableError } from '../services/staticAnalysisService.js';
 import { createAnalysisJob, getAnalysisJob, toPublicAnalysisJob } from '../services/analysisService.js';
-import { beginRepositoryAnalysis, readRepositoryAnalysisStatus, readRepositoryOverview, readRepositoryStaticIssues } from '../services/analysisOrchestrationService.js';
-import { acquireRepository, analysisWorkspacePath } from '../services/repositoryAcquisitionService.js';
+import { getStoredAnalysisResults, rememberRepositoryAi } from '../services/analysisResultStore.js';
+import { beginRepositoryAnalysis, readRepositoryAnalysisStatus, readRepositoryOverview, readRepositoryStaticIssues, readTechnicalDebt } from '../services/analysisOrchestrationService.js';
+import { acquireRepository, analysisWorkspacePath, holdGithubToken } from '../services/repositoryAcquisitionService.js';
+import { buildAnalysisReport, renderAnalysisReportHtml } from '../services/reportService.js';
+import { acquireUploadedArchive, archiveLabel, assertZipUpload, ZipExtractError } from '../services/zipAcquisitionService.js';
 import { HttpError } from '../utils/httpError.js';
 import { validateCreateAnalysisRequest } from '../utils/validateCreateAnalysis.js';
 
-const NOT_IMPLEMENTED = 'Analysis results are not implemented yet.';
-
-function requireJob(analysisId: string) {
+function requireJob(req: Request) {
+  const analysisId = req.params.analysisId;
+  if (typeof analysisId !== 'string' || analysisId.trim() === '') {
+    throw new HttpError(400, 'VALIDATION_ERROR', 'analysisId is required');
+  }
   const job = getAnalysisJob(analysisId);
-  if (!job) {
+  if (!job || !req.user || job.ownerId !== req.user.id) {
     throw new HttpError(404, 'ANALYSIS_NOT_FOUND', 'Analysis not found');
   }
   return job;
 }
 
+function readSuppliedGithubToken(req: Request): string | undefined {
+  const header = req.header('x-github-token');
+  const body = req.body;
+  const bodyToken =
+    typeof body === 'object' && body !== null && typeof (body as { githubToken?: unknown }).githubToken === 'string'
+      ? (body as { githubToken: string }).githubToken
+      : undefined;
+  if (typeof body === 'object' && body !== null && 'githubToken' in body) {
+    delete (body as { githubToken?: unknown }).githubToken;
+  }
+  const token = (header ?? bodyToken ?? '').trim();
+  return token || undefined;
+}
+
 export async function createAnalysis(req: Request, res: Response): Promise<void> {
+  const suppliedToken = readSuppliedGithubToken(req);
   const input = validateCreateAnalysisRequest(req.body);
-  const job = createAnalysisJob(input);
+  if (!req.user) throw new HttpError(401, 'UNAUTHORIZED', 'Authentication is required.');
+  const job = createAnalysisJob({ ...input, ownerId: req.user.id });
+  if (suppliedToken) holdGithubToken(job.analysisId, suppliedToken);
   const responseJob = toPublicAnalysisJob(job);
   void acquireRepository(job.analysisId)
     .then(() => {
       beginRepositoryAnalysis(job.analysisId);
     })
     .catch((error: unknown) => {
-      console.error('Repository acquisition stopped unexpectedly', error);
+      console.error('Repository acquisition stopped unexpectedly', error instanceof Error ? error.name : 'error');
     });
   res.status(201).json({
     success: true,
     data: responseJob,
+  });
+}
+
+export async function createZipAnalysis(req: Request, res: Response): Promise<void> {
+  if (!req.user) throw new HttpError(401, 'UNAUTHORIZED', 'Authentication is required.');
+  const file = req.file;
+  try {
+    assertZipUpload(file ? { size: file.size, originalname: file.originalname } : undefined);
+  } catch (error) {
+    if (error instanceof ZipExtractError) {
+      const status = error.code === 'LIMIT' ? 413 : 400;
+      throw new HttpError(status, 'VALIDATION_ERROR', error.message);
+    }
+    throw error;
+  }
+  if (!file?.buffer) throw new HttpError(400, 'VALIDATION_ERROR', 'A ZIP archive is required.');
+  const label = archiveLabel(file.originalname);
+  const requestedBranch = typeof req.body?.branch === 'string' ? req.body.branch.trim() : '';
+  const branch = requestedBranch || 'uploaded';
+  if (!/^[A-Za-z0-9._/-]+$/.test(branch) || branch.startsWith('-') || branch.includes('..')) {
+    throw new HttpError(400, 'VALIDATION_ERROR', 'branch must contain only letters, numbers, and . _ / -');
+  }
+  const job = createAnalysisJob({
+    repositoryUrl: `zip-upload:${label}`,
+    repositoryName: label.replace(/\.zip$/i, '') || 'upload',
+    branch,
+    sourceType: 'zip',
+    ownerId: req.user.id,
+  });
+  void acquireUploadedArchive(job.analysisId, file.buffer)
+    .then(() => {
+      beginRepositoryAnalysis(job.analysisId);
+    })
+    .catch((error: unknown) => {
+      console.error('ZIP acquisition stopped unexpectedly', error instanceof Error ? error.name : 'error');
+    });
+  res.status(201).json({
+    success: true,
+    data: toPublicAnalysisJob(job),
   });
 }
 
@@ -47,16 +108,17 @@ export async function getAnalysis(req: Request, res: Response): Promise<void> {
   }
   res.status(200).json({
     success: true,
-    data: toPublicAnalysisJob(requireJob(analysisId)),
+    data: toPublicAnalysisJob(requireJob(req)),
   });
 }
 
-function requireReadyWorkspace(analysisId: string): string {
-  if (analysisId.trim() === '') {
+function requireReadyWorkspace(req: Request): string {
+  const analysisId = req.params.analysisId;
+  if (typeof analysisId !== 'string' || analysisId.trim() === '') {
     throw new HttpError(400, 'VALIDATION_ERROR', 'analysisId is required');
   }
 
-  const job = requireJob(analysisId);
+  const job = requireJob(req);
   if (job.status !== 'ready' || !job.workspacePath) {
     throw new HttpError(
       409,
@@ -84,7 +146,7 @@ export async function getAnalysisStatus(req: Request, res: Response): Promise<vo
   if (typeof analysisId !== 'string' || analysisId.trim() === '') {
     throw new HttpError(400, 'VALIDATION_ERROR', 'analysisId is required');
   }
-  const job = requireJob(analysisId);
+  const job = requireJob(req);
   if (job.status === 'queued' || job.status === 'acquiring') {
     throw new HttpError(409, 'ACQUISITION_NOT_READY', 'Repository acquisition is not complete.');
   }
@@ -99,7 +161,7 @@ export async function getAnalysisOverview(req: Request, res: Response): Promise<
   if (typeof analysisId !== 'string' || analysisId.trim() === '') {
     throw new HttpError(400, 'VALIDATION_ERROR', 'analysisId is required');
   }
-  const job = requireJob(analysisId);
+  const job = requireJob(req);
   if (job.status === 'queued' || job.status === 'acquiring') {
     throw new HttpError(409, 'ACQUISITION_NOT_READY', 'Repository acquisition is not complete.');
   }
@@ -114,14 +176,21 @@ export async function getAnalysisIssues(req: Request, res: Response): Promise<vo
   if (typeof analysisId !== 'string' || analysisId.trim() === '') {
     throw new HttpError(400, 'VALIDATION_ERROR', 'analysisId is required');
   }
-  const job = requireJob(analysisId);
+  const job = requireJob(req);
   if (job.status === 'queued' || job.status === 'acquiring') {
     throw new HttpError(409, 'ACQUISITION_NOT_READY', 'Repository acquisition is not complete.');
   }
-  if (job.status === 'failed' || !job.workspacePath) {
+  if (job.status === 'failed') {
     throw new HttpError(409, 'ACQUISITION_NOT_READY', job.errorMessage ?? 'Repository acquisition failed.');
   }
   const result = readRepositoryStaticIssues(job);
+  if (result.state === 'pending') {
+    const stored = getStoredAnalysisResults(job.analysisId)?.issues;
+    if (stored) {
+      res.status(200).json({ success: true, data: stored });
+      return;
+    }
+  }
   if (result.state === 'failed') {
     throw new HttpError(503, 'STATIC_ANALYSIS_FAILED', result.message);
   }
@@ -135,18 +204,18 @@ export async function getAnalysisIssues(req: Request, res: Response): Promise<vo
 }
 
 export async function getAstAnalysis(req: Request, res: Response): Promise<void> {
-  const analysisId = req.params.analysisId;
-  if (typeof analysisId !== 'string') {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'analysisId is required');
+  const job = requireJob(req);
+  const stored = getStoredAnalysisResults(job.analysisId)?.ast ?? null;
+  if (job.status !== 'ready' || !job.workspacePath) {
+    if (stored) {
+      res.status(200).json({ success: true, data: stored });
+      return;
+    }
   }
-  const workspace = requireReadyWorkspace(analysisId);
-
+  const workspace = requireReadyWorkspace(req);
   try {
-    const result = await analyzeAcquiredRepository(analysisId, workspace);
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
+    const result = await withStoredFallback(job.analysisId, () => analyzeAcquiredRepository(job.analysisId, workspace), stored);
+    res.status(200).json({ success: true, data: result });
   } catch (error) {
     if (error instanceof Error && error.message === 'WORKSPACE_MISSING') {
       throw new HttpError(409, 'ACQUISITION_NOT_READY', 'Acquired workspace is no longer available.');
@@ -156,18 +225,22 @@ export async function getAstAnalysis(req: Request, res: Response): Promise<void>
 }
 
 export async function getDependencyAnalysis(req: Request, res: Response): Promise<void> {
-  const analysisId = req.params.analysisId;
-  if (typeof analysisId !== 'string') {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'analysisId is required');
+  const job = requireJob(req);
+  const stored = getStoredAnalysisResults(job.analysisId)?.dependencies ?? null;
+  if (job.status !== 'ready' || !job.workspacePath) {
+    if (stored) {
+      res.status(200).json({ success: true, data: stored });
+      return;
+    }
   }
-  const workspace = requireReadyWorkspace(analysisId);
-
+  const workspace = requireReadyWorkspace(req);
   try {
-    const result = await analyzeAcquiredDependencies(analysisId, workspace);
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
+    const result = await withStoredFallback(
+      job.analysisId,
+      () => analyzeAcquiredDependencies(job.analysisId, workspace),
+      stored,
+    );
+    res.status(200).json({ success: true, data: result });
   } catch (error) {
     if (error instanceof Error && error.message === 'WORKSPACE_MISSING') {
       throw new HttpError(409, 'ACQUISITION_NOT_READY', 'Acquired workspace is no longer available.');
@@ -177,18 +250,22 @@ export async function getDependencyAnalysis(req: Request, res: Response): Promis
 }
 
 export async function getGitHistory(req: Request, res: Response): Promise<void> {
-  const analysisId = req.params.analysisId;
-  if (typeof analysisId !== 'string') {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'analysisId is required');
+  const job = requireJob(req);
+  const stored = getStoredAnalysisResults(job.analysisId)?.history ?? null;
+  if (job.status !== 'ready' || !job.workspacePath) {
+    if (stored) {
+      res.status(200).json({ success: true, data: stored });
+      return;
+    }
   }
-  const workspace = requireReadyWorkspace(analysisId);
-
+  const workspace = requireReadyWorkspace(req);
   try {
-    const result = await analyzeAcquiredGitHistory(analysisId, workspace);
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
+    const result = await withStoredFallback(
+      job.analysisId,
+      () => analyzeAcquiredGitHistory(job.analysisId, workspace),
+      stored,
+    );
+    res.status(200).json({ success: true, data: result });
   } catch (error) {
     if (error instanceof GitHistoryError) {
       if (error.code === 'WORKSPACE_MISSING') {
@@ -210,18 +287,18 @@ export async function getGitHistory(req: Request, res: Response): Promise<void> 
 }
 
 export async function getStaticAnalysis(req: Request, res: Response): Promise<void> {
-  const analysisId = req.params.analysisId;
-  if (typeof analysisId !== 'string') {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'analysisId is required');
+  const job = requireJob(req);
+  const stored = getStoredAnalysisResults(job.analysisId)?.staticAnalysis ?? null;
+  if (job.status !== 'ready' || !job.workspacePath) {
+    if (stored) {
+      res.status(200).json({ success: true, data: stored });
+      return;
+    }
   }
-  const workspace = requireReadyWorkspace(analysisId);
-
+  const workspace = requireReadyWorkspace(req);
   try {
-    const result = await analyzeAcquiredStatic(analysisId, workspace);
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
+    const result = await withStoredFallback(job.analysisId, () => analyzeAcquiredStatic(job.analysisId, workspace), stored);
+    res.status(200).json({ success: true, data: result });
   } catch (error) {
     if (error instanceof StaticAnalysisUnavailableError) {
       throw new HttpError(503, 'STATIC_ANALYSIS_UNAVAILABLE', error.message);
@@ -255,7 +332,7 @@ export async function getRepositoryContext(req: Request, res: Response): Promise
     throw new HttpError(400, 'VALIDATION_ERROR', 'path is required for file context.');
   }
 
-  const workspace = requireReadyWorkspace(analysisId);
+  const workspace = requireReadyWorkspace(req);
   const job = getAnalysisJob(analysisId);
   if (!job) {
     throw new HttpError(404, 'ANALYSIS_NOT_FOUND', 'Analysis not found');
@@ -316,13 +393,15 @@ function mapLlmError(error: LlmError): HttpError {
 }
 
 export async function postAiSummary(req: Request, res: Response): Promise<void> {
-  const analysisId = req.params.analysisId;
-  if (typeof analysisId !== 'string') {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'analysisId is required');
+  const job = requireJob(req);
+  const storedAi = getStoredAnalysisResults(job.analysisId)?.repositoryAi ?? null;
+  if (job.status !== 'ready' || !job.workspacePath) {
+    if (storedAi) {
+      res.status(200).json({ success: true, data: storedAi });
+      return;
+    }
   }
-  const workspace = requireReadyWorkspace(analysisId);
-  const job = getAnalysisJob(analysisId);
-  if (!job) throw new HttpError(404, 'ANALYSIS_NOT_FOUND', 'Analysis not found');
+  const workspace = requireReadyWorkspace(req);
 
   try {
     requireAiConfig(readAiConfig());
@@ -337,6 +416,7 @@ export async function postAiSummary(req: Request, res: Response): Promise<void> 
       { mode: 'repository-summary' },
     );
     const interpretation = await interpretAcquiredContext(`${job.analysisId}:repository-summary`, context);
+    rememberRepositoryAi(job.analysisId, interpretation);
     res.status(200).json({ success: true, data: interpretation });
   } catch (error) {
     throw mapAnalysisFailure(error);
@@ -372,7 +452,7 @@ async function postExperimentInterpretation(
   if (typeof requestedPath !== 'string') {
     throw new HttpError(400, 'VALIDATION_ERROR', 'path is required.');
   }
-  const workspace = requireReadyWorkspace(analysisId);
+  const workspace = requireReadyWorkspace(req);
   const job = getAnalysisJob(analysisId);
   if (!job) throw new HttpError(404, 'ANALYSIS_NOT_FOUND', 'Analysis not found');
 
@@ -416,7 +496,7 @@ export async function postAiFileSummary(req: Request, res: Response): Promise<vo
   if (typeof requestedPath !== 'string') {
     throw new HttpError(400, 'VALIDATION_ERROR', 'path is required.');
   }
-  const workspace = requireReadyWorkspace(analysisId);
+  const workspace = requireReadyWorkspace(req);
   const job = getAnalysisJob(analysisId);
   if (!job) throw new HttpError(404, 'ANALYSIS_NOT_FOUND', 'Analysis not found');
 
@@ -465,15 +545,45 @@ function mapAnalysisFailure(error: unknown): Error {
   return error instanceof Error ? error : new Error('Internal server error');
 }
 
-export async function getAnalysisStub(req: Request, res: Response): Promise<void> {
-  const analysisId = req.params.analysisId;
-  if (typeof analysisId !== 'string' || analysisId.trim() === '') {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'analysisId is required');
+export async function getTechnicalDebt(req: Request, res: Response): Promise<void> {
+  const job = requireJob(req);
+  if (job.status === 'queued' || job.status === 'acquiring') {
+    throw new HttpError(409, 'ACQUISITION_NOT_READY', 'Repository acquisition is not complete.');
   }
-  requireJob(analysisId);
-  res.status(200).json({
-    success: true,
-    data: null,
-    message: NOT_IMPLEMENTED,
-  });
+  const result = readTechnicalDebt(job);
+  if (result.state === 'failed') {
+    throw new HttpError(409, 'ACQUISITION_NOT_READY', result.message);
+  }
+  if (result.state === 'pending') {
+    throw new HttpError(409, 'DEBT_NOT_READY', 'Technical debt indicators are not ready yet.');
+  }
+  res.status(200).json({ success: true, data: result.report });
+}
+
+export async function getAnalysisReport(req: Request, res: Response): Promise<void> {
+  const job = requireJob(req);
+  res.status(200).json({ success: true, data: buildAnalysisReport(job) });
+}
+
+export async function getAnalysisReportHtml(req: Request, res: Response): Promise<void> {
+  const job = requireJob(req);
+  res.status(200).type('html').send(renderAnalysisReportHtml(buildAnalysisReport(job)));
+}
+
+async function withStoredFallback<T>(
+  analysisId: string,
+  load: () => Promise<T>,
+  stored: T | null | undefined,
+): Promise<T> {
+  try {
+    return await load();
+  } catch (error) {
+    if (stored && isWorkspaceUnavailable(error)) return stored;
+    throw error;
+  }
+}
+
+function isWorkspaceUnavailable(error: unknown): boolean {
+  if (error instanceof GitHistoryError && error.code === 'WORKSPACE_MISSING') return true;
+  return error instanceof Error && error.message === 'WORKSPACE_MISSING';
 }

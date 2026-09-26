@@ -16,10 +16,65 @@ function readNodeEnv(raw: string | undefined): 'development' | 'production' | 't
   return 'development';
 }
 
+function readPositiveInt(raw: string | undefined, fallback: number): number {
+  if (!raw || raw.trim() === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) return fallback;
+  return value;
+}
+
 export const env = {
-  port: readPort(process.env.PORT),
-  frontendUrl: process.env.FRONTEND_URL?.trim() || 'http://localhost:5173',
-  nodeEnv: readNodeEnv(process.env.NODE_ENV),
-  openaiApiKey: process.env.OPENAI_API_KEY?.trim() ?? '',
-  openaiModel: process.env.OPENAI_MODEL?.trim() ?? '',
+  get port(): number {
+    return readPort(process.env.PORT);
+  },
+  get frontendUrl(): string {
+    return process.env.FRONTEND_URL?.trim() || 'http://localhost:5173';
+  },
+  get nodeEnv(): 'development' | 'production' | 'test' {
+    return readNodeEnv(process.env.NODE_ENV);
+  },
+  get openaiApiKey(): string {
+    return process.env.OPENAI_API_KEY?.trim() ?? '';
+  },
+  get openaiModel(): string {
+    return process.env.OPENAI_MODEL?.trim() ?? '';
+  },
+  get mongoUri(): string {
+    return process.env.MONGODB_URI?.trim() ?? '';
+  },
+  get mongoDb(): string {
+    return process.env.MONGODB_DB?.trim() || 'repoguard';
+  },
+  get jwtSecret(): string {
+    return process.env.JWT_SECRET?.trim() ?? '';
+  },
+  get authRequired(): boolean {
+    const raw = process.env.AUTH_REQUIRED?.trim().toLowerCase();
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+    return readNodeEnv(process.env.NODE_ENV) === 'production';
+  },
+  /** Server-side default for private GitHub clones. Never returned to clients. */
+  get githubToken(): string {
+    return process.env.GITHUB_TOKEN?.trim() ?? '';
+  },
+  get maxZipBytes(): number {
+    return readPositiveInt(process.env.MAX_ZIP_BYTES, 50 * 1024 * 1024);
+  },
+  get maxZipUncompressedBytes(): number {
+    return readPositiveInt(process.env.MAX_ZIP_UNCOMPRESSED_BYTES, 200 * 1024 * 1024);
+  },
+  get requestTimeoutMs(): number {
+    return readPositiveInt(process.env.REQUEST_TIMEOUT_MS, 60_000);
+  },
+  get cloneTimeoutMs(): number {
+    return readPositiveInt(process.env.CLONE_TIMEOUT_MS, 180_000);
+  },
 };
+
+export function assertProductionConfig(): void {
+  if (!env.authRequired) return;
+  if (env.jwtSecret.length < 16) {
+    throw new Error('JWT_SECRET must be set to at least 16 characters when authentication is required');
+  }
+}

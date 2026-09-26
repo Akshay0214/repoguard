@@ -21,7 +21,7 @@ import type { GitHistoryResult } from '../types/gitHistory.js';
 import type { StaticAnalysisResult, StaticFinding } from '../types/staticAnalysis.js';
 import { analyzeAcquiredRepository } from './astAnalysisService.js';
 import { analyzeAcquiredDependencies } from './dependencyAnalysisService.js';
-import { analyzeAcquiredGitHistory } from './gitHistoryAnalysisService.js';
+import { analyzeAcquiredGitHistory, GitHistoryError } from './gitHistoryAnalysisService.js';
 import { analyzeAcquiredStatic } from './staticAnalysisService.js';
 
 /**
@@ -119,7 +119,7 @@ async function assembleContext(
   const [ast, dependencies, history, staticAnalysis] = await Promise.all([
     analyzeAcquiredRepository(identity.analysisId, workspacePath),
     analyzeAcquiredDependencies(identity.analysisId, workspacePath),
-    analyzeAcquiredGitHistory(identity.analysisId, workspacePath),
+    loadHistory(identity.analysisId, workspacePath),
     analyzeAcquiredStatic(identity.analysisId, workspacePath),
   ]);
   const repository: ContextRepository = {
@@ -134,6 +134,35 @@ async function assembleContext(
     return buildFile(repository, normalizedPath, ast, dependencies, history, staticAnalysis);
   }
   return buildExperiment(request.mode, repository, normalizedPath, ast, dependencies, history, staticAnalysis);
+}
+
+async function loadHistory(analysisId: string, workspacePath: string): Promise<GitHistoryResult> {
+  try {
+    return await analyzeAcquiredGitHistory(analysisId, workspacePath);
+  } catch (error) {
+    if (error instanceof GitHistoryError && error.code === 'NO_GIT_REPOSITORY') {
+      return {
+        summary: {
+          availableCommits: 0,
+          uniqueAuthors: 0,
+          totalFileChanges: 0,
+          totalAdditions: 0,
+          totalDeletions: 0,
+          oldestAvailableCommitAt: null,
+          newestAvailableCommitAt: null,
+          historyDepth: 'complete',
+          isComplete: false,
+          commitsWithoutFileDiff: 0,
+        },
+        commits: [],
+        authors: [],
+        files: [],
+        mostChangedFiles: [],
+        errors: [{ message: error.message }],
+      };
+    }
+    throw error;
+  }
 }
 
 function buildSummary(

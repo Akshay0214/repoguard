@@ -2,28 +2,11 @@
 //
 // Every function here returns a Promise and is shaped the way a real
 // HTTP client call would look (e.g. `fetch('/api/repository/overview')`).
-// analyzeRepository, overview, issues, dependencies, file AI, and Git history
-// call the API. The remaining helpers still resolve with sample data.
+// analyzeRepository, overview, issues, dependencies, file AI, repository AI,
+// technical debt, and Git history call the API.
 
-import type {
-  AnalysisHistoryEntry,
-  AnalysisJob,
-  AnalysisProgressStep,
-  AnalysisStatus,
-  AnalyzeRequest,
-  AppSettings,
-  DependencyGraphData,
-  Issue,
-  RepositoryOverview,
-  TechnicalDebtSummary,
-} from '@/types';
-import { mockRepositoryOverview } from '@/data/mock/repository';
-import { mockIssues } from '@/data/mock/issues';
-import { mockTechnicalDebt } from '@/data/mock/technicalDebt';
-import { mockDependencyGraph } from '@/data/mock/dependencies';
-import { mockAnalysisHistory } from '@/data/mock/history';
-import { mockSettings } from '@/data/mock/settings';
-import { ApiError, getJson, postJson } from '@/services/apiClient';
+import type { AnalysisJob, AnalysisProgressStep, AnalysisStatus, AnalyzeRequest } from '@/types';
+import { ApiError, getJson, getText, postForm, postJson } from '@/services/apiClient';
 
 export type RepositoryModuleStatus = 'pending' | 'running' | 'ready' | 'failed';
 
@@ -42,10 +25,7 @@ export interface RepositoryAnalysisStatus {
   limitations: string[];
 }
 
-const NETWORK_DELAY_MS = 450;
 const ANALYSIS_STATUSES: readonly AnalysisStatus[] = ['idle', 'queued', 'running', 'completed', 'failed'];
-
-const ZIP_UNSUPPORTED_MESSAGE = 'ZIP repository analysis will be available in a future version.';
 
 function isAnalysisStatus(value: unknown): value is AnalysisStatus {
   return typeof value === 'string' && ANALYSIS_STATUSES.some((status) => status === value);
@@ -56,7 +36,7 @@ function readCreatedAnalysis(payload: unknown): {
   repositoryUrl: string;
   repositoryName: string;
   branch: string;
-  sourceType: 'github';
+  sourceType: 'github' | 'zip';
   status: AnalysisStatus;
   createdAt: string;
 } {
@@ -85,7 +65,7 @@ function readCreatedAnalysis(payload: unknown): {
   if (typeof data.repositoryUrl !== 'string' || typeof data.repositoryName !== 'string' || typeof data.branch !== 'string') {
     throw new ApiError('The API returned an unexpected analysis response.', 0);
   }
-  if (data.sourceType !== 'github' || !isAnalysisStatus(data.status)) {
+  if ((data.sourceType !== 'github' && data.sourceType !== 'zip') || !isAnalysisStatus(data.status)) {
     throw new ApiError('The API returned an unexpected analysis response.', 0);
   }
 
@@ -94,26 +74,38 @@ function readCreatedAnalysis(payload: unknown): {
     repositoryUrl: data.repositoryUrl,
     repositoryName: data.repositoryName,
     branch: data.branch,
-    sourceType: 'github',
+    sourceType: data.sourceType,
     status: data.status,
     createdAt: typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString(),
   };
 }
 
-function delay<T>(value: T, ms = NETWORK_DELAY_MS): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}
-
 /**
- * Creates a queued analysis job. Result pages still read the sample dataset.
- * `onProgress` remains for callers that will later follow a real pipeline.
+ * Creates an analysis job for a GitHub repository or an uploaded ZIP.
+ * A GitHub token is sent only as a request header and is not stored.
  */
 export async function analyzeRepository(
   request: AnalyzeRequest,
   _onProgress?: (steps: AnalysisProgressStep[], percent: number) => void,
 ): Promise<AnalysisJob> {
-  if (request.source !== 'github') {
-    throw new ApiError(ZIP_UNSUPPORTED_MESSAGE, 0);
+  if (request.source === 'upload') {
+    if (!request.file) throw new ApiError('A ZIP archive is required.', 400);
+    const form = new FormData();
+    form.append('archive', request.file);
+    if (request.branch?.trim()) form.append('branch', request.branch.trim());
+    const payload = await postForm('/analyses/upload', form);
+    const created = readCreatedAnalysis(payload);
+    return {
+      id: created.analysisId,
+      status: created.status,
+      progress: 0,
+      steps: [],
+      startedAt: created.createdAt,
+      repositoryUrl: created.repositoryUrl,
+      repositoryName: created.repositoryName,
+      branch: created.branch,
+      sourceType: created.sourceType,
+    };
   }
 
   const repositoryUrl = request.githubUrl?.trim() ?? '';
@@ -122,11 +114,20 @@ export async function analyzeRepository(
     throw new ApiError('A repository URL is required.', 400);
   }
 
-  const payload = await postJson('/analyses', {
-    sourceType: 'github',
-    repositoryUrl,
-    branch,
-  });
+  const headers: Record<string, string> = {};
+  const token = request.githubToken?.trim();
+  if (token) headers['X-GitHub-Token'] = token;
+
+  const payload = await postJson(
+    '/analyses',
+    {
+      sourceType: 'github',
+      repositoryUrl,
+      branch,
+    },
+    'Unable to start repository analysis. Please check the repository URL and try again.',
+    headers,
+  );
   const created = readCreatedAnalysis(payload);
 
   return {
@@ -138,7 +139,7 @@ export async function analyzeRepository(
     repositoryUrl: created.repositoryUrl,
     repositoryName: created.repositoryName,
     branch: created.branch,
-    sourceType: 'github',
+    sourceType: created.sourceType,
   };
 }
 
@@ -248,6 +249,18 @@ export interface AnalysisOverview {
     historyDepth: string;
     isComplete: boolean;
   } | null;
+  health: {
+    disclaimer: string;
+    formula: string;
+    heuristicScore: number | null;
+    omittedInputs: string[];
+    indicators: Array<{ id: string; label: string; value: number | string | null; available: boolean }>;
+  } | null;
+  debt: {
+    disclaimer: string;
+    summary: { itemCount: number; estimatedContribution: number };
+    limitations: string[];
+  } | null;
 }
 
 function readCount(value: unknown): number | null {
@@ -265,6 +278,70 @@ function readSection<T extends object>(value: unknown, fields: Array<keyof T>): 
     section[field] = count as T[keyof T];
   }
   return section;
+}
+
+function readHealth(value: unknown): AnalysisOverview['health'] {
+  if (typeof value !== 'object' || value === null) return null;
+  const health = value as {
+    disclaimer?: unknown;
+    formula?: unknown;
+    heuristicScore?: unknown;
+    omittedInputs?: unknown;
+    indicators?: unknown;
+  };
+  if (typeof health.disclaimer !== 'string' || typeof health.formula !== 'string' || !Array.isArray(health.indicators)) {
+    return null;
+  }
+  const score = health.heuristicScore === null ? null : readCount(health.heuristicScore);
+  if (health.heuristicScore !== null && score === null) return null;
+  const indicators = health.indicators.flatMap((item) => {
+    if (typeof item !== 'object' || item === null) return [];
+    const indicator = item as { id?: unknown; label?: unknown; value?: unknown; available?: unknown };
+    if (typeof indicator.id !== 'string' || typeof indicator.label !== 'string' || typeof indicator.available !== 'boolean') {
+      return [];
+    }
+    const indicatorValue =
+      indicator.value === null || typeof indicator.value === 'string' || typeof indicator.value === 'number'
+        ? indicator.value
+        : null;
+    return [{ id: indicator.id, label: indicator.label, value: indicatorValue, available: indicator.available }];
+  });
+  const omittedInputs = Array.isArray(health.omittedInputs)
+    ? health.omittedInputs.filter((item): item is string => typeof item === 'string')
+    : [];
+  return {
+    disclaimer: health.disclaimer,
+    formula: health.formula,
+    heuristicScore: score,
+    omittedInputs,
+    indicators,
+  };
+}
+
+function readDebtSummary(value: unknown): AnalysisOverview['debt'] {
+  if (value === null || typeof value !== 'object') return null;
+  const debt = value as {
+    disclaimer?: unknown;
+    summary?: { itemCount?: unknown; estimatedContribution?: unknown };
+    limitations?: unknown;
+  };
+  if (
+    typeof debt.disclaimer !== 'string' ||
+    typeof debt.summary?.itemCount !== 'number' ||
+    typeof debt.summary.estimatedContribution !== 'number'
+  ) {
+    return null;
+  }
+  return {
+    disclaimer: debt.disclaimer,
+    summary: {
+      itemCount: debt.summary.itemCount,
+      estimatedContribution: debt.summary.estimatedContribution,
+    },
+    limitations: Array.isArray(debt.limitations)
+      ? debt.limitations.filter((item): item is string => typeof item === 'string')
+      : [],
+  };
 }
 
 export async function getAnalysisOverview(analysisId: string): Promise<AnalysisOverview> {
@@ -386,6 +463,8 @@ export async function getAnalysisOverview(analysisId: string): Promise<AnalysisO
     dependencies,
     static: staticSummary,
     history: historyOverview,
+    health: readHealth((data as { health?: unknown }).health),
+    debt: readDebtSummary((data as { debt?: unknown }).debt),
   };
 }
 
@@ -1046,34 +1125,122 @@ export async function getFileAiInterpretation(analysisId: string, path: string):
   };
 }
 
-export async function getRepositoryOverview(): Promise<RepositoryOverview> {
-  return delay(mockRepositoryOverview);
+export async function getRepositoryAiInterpretation(analysisId: string): Promise<FileAiInterpretation> {
+  const payload = await postJson(
+    `/analyses/${encodeURIComponent(analysisId)}/ai-summary`,
+    {},
+    'AI interpretation is temporarily unavailable.',
+  );
+  return readInterpretationPayload(payload);
 }
 
-export async function getIssues(): Promise<Issue[]> {
-  return delay(mockIssues);
+export interface DebtIndicatorItem {
+  id: string;
+  indicator: string;
+  category: string;
+  affectedFile: string;
+  evidence: { source: string; path: string | null; detail: string };
+  contribution: number;
+  explanation: string;
 }
 
-export async function getIssueById(id: string): Promise<Issue | undefined> {
-  return delay(mockIssues.find((issue) => issue.id === id));
+export interface TechnicalDebtReport {
+  analysisId: string;
+  kind: string;
+  disclaimer: string;
+  items: DebtIndicatorItem[];
+  summary: {
+    itemCount: number;
+    estimatedContribution: number;
+    truncated: boolean;
+  };
+  limitations: string[];
 }
 
-export async function getTechnicalDebt(): Promise<TechnicalDebtSummary> {
-  return delay(mockTechnicalDebt);
+export async function getTechnicalDebtReport(analysisId: string): Promise<TechnicalDebtReport> {
+  const payload = await getJson(`/analyses/${encodeURIComponent(analysisId)}/debt`);
+  if (typeof payload !== 'object' || payload === null) {
+    throw new ApiError('The API returned an unexpected technical debt result.', 0);
+  }
+  const envelope = payload as { success?: unknown; data?: unknown };
+  if (envelope.success !== true || typeof envelope.data !== 'object' || envelope.data === null) {
+    throw new ApiError('The API returned an unexpected technical debt result.', 0);
+  }
+  const data = envelope.data as Partial<TechnicalDebtReport>;
+  const items = Array.isArray(data.items) ? data.items.filter(isDebtItem) : null;
+  const limitations = Array.isArray(data.limitations)
+    ? data.limitations.filter((item): item is string => typeof item === 'string')
+    : null;
+  if (
+    data.analysisId !== analysisId ||
+    typeof data.disclaimer !== 'string' ||
+    !data.summary ||
+    typeof data.summary.itemCount !== 'number' ||
+    typeof data.summary.estimatedContribution !== 'number' ||
+    typeof data.summary.truncated !== 'boolean' ||
+    !items ||
+    !limitations
+  ) {
+    throw new ApiError('The API returned an unexpected technical debt result.', 0);
+  }
+  return {
+    analysisId,
+    kind: typeof data.kind === 'string' ? data.kind : 'technical-debt-indicators',
+    disclaimer: data.disclaimer,
+    items,
+    summary: data.summary,
+    limitations,
+  };
 }
 
-export async function getDependencies(): Promise<DependencyGraphData> {
-  return delay(mockDependencyGraph);
+export async function downloadAnalysisReport(analysisId: string): Promise<unknown> {
+  return getJson(`/analyses/${encodeURIComponent(analysisId)}/report`);
 }
 
-export async function getAnalysisHistory(): Promise<AnalysisHistoryEntry[]> {
-  return delay(mockAnalysisHistory);
+export async function downloadAnalysisReportHtml(analysisId: string): Promise<string> {
+  return getText(`/analyses/${encodeURIComponent(analysisId)}/report.html`);
 }
 
-export async function getSettings(): Promise<AppSettings> {
-  return delay(mockSettings);
+function readInterpretationPayload(payload: unknown): FileAiInterpretation {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new ApiError('AI interpretation returned an invalid response.', 0, 'AI_RESPONSE_INVALID');
+  }
+  const envelope = payload as { success?: unknown; data?: unknown };
+  if (envelope.success !== true || typeof envelope.data !== 'object' || envelope.data === null) {
+    throw new ApiError('AI interpretation returned an invalid response.', 0, 'AI_RESPONSE_INVALID');
+  }
+  const data = envelope.data as Partial<FileAiInterpretation>;
+  const observations = Array.isArray(data.observations) ? data.observations.map(readAiObservation) : null;
+  const limitations = Array.isArray(data.limitations)
+    ? data.limitations.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+    : null;
+  if (
+    typeof data.summary !== 'string' ||
+    data.summary.trim() === '' ||
+    !observations ||
+    observations.some((observation) => observation === null) ||
+    !limitations
+  ) {
+    throw new ApiError('AI interpretation returned an invalid response.', 0, 'AI_RESPONSE_INVALID');
+  }
+  return {
+    summary: data.summary,
+    observations: observations as FileAiObservation[],
+    limitations,
+  };
 }
 
-export async function updateSettings(next: AppSettings): Promise<AppSettings> {
-  return delay(next, 300);
+function isDebtItem(value: unknown): value is DebtIndicatorItem {
+  if (typeof value !== 'object' || value === null) return false;
+  const item = value as Partial<DebtIndicatorItem>;
+  return (
+    typeof item.id === 'string' &&
+    typeof item.indicator === 'string' &&
+    typeof item.affectedFile === 'string' &&
+    typeof item.contribution === 'number' &&
+    typeof item.explanation === 'string' &&
+    typeof item.evidence === 'object' &&
+    item.evidence !== null &&
+    typeof item.evidence.detail === 'string'
+  );
 }

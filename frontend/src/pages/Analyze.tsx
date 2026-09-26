@@ -17,38 +17,38 @@ export function Analyze() {
   const [source, setSource] = useState<Source>('github');
   const [githubUrl, setGithubUrl] = useState('');
   const [branch, setBranch] = useState('main');
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [githubToken, setGithubToken] = useState('');
+  const [file, setFile] = useState<File | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canAnalyze = source === 'github' && githubUrl.trim().length > 0;
+  const canAnalyze = source === 'github' ? githubUrl.trim().length > 0 : Boolean(file);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) setFileName(file.name);
+    const next = e.target.files?.[0] ?? null;
+    setFile(next);
   };
 
   const handleAnalyze = async () => {
     setError(null);
-    if (source !== 'github') {
-      setError('ZIP repository analysis will be available in a future version.');
-      return;
-    }
-
     setRunning(true);
     try {
       const job = await analyzeRepository({
         source,
         githubUrl,
         branch,
+        githubToken: source === 'github' ? githubToken : undefined,
+        file: file ?? undefined,
+        fileName: file?.name,
       });
+      setGithubToken('');
       setCurrentAnalysis(toCurrentAnalysis(job));
       navigate('/dashboard');
     } catch (caught) {
       setError(
         caught instanceof ApiError
           ? caught.message
-          : 'Unable to start repository analysis. Please check the repository URL and try again.',
+          : 'Unable to start repository analysis. Please check the repository and try again.',
       );
       setRunning(false);
     }
@@ -58,7 +58,7 @@ export function Analyze() {
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title="Analyze Repository"
-        description="Create an analysis job for a GitHub repository. The dashboard shows that job's identity and readiness."
+        description="Create an analysis job from a public or private GitHub repository, or from a ZIP archive."
       />
 
       {!running && (
@@ -104,17 +104,31 @@ export function Analyze() {
                   className="w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)] focus:border-[var(--color-accent)]"
                 />
               </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-muted)]">
+                  GitHub token for private repositories
+                </label>
+                <input
+                  type="password"
+                  value={githubToken}
+                  onChange={(e) => setGithubToken(e.target.value)}
+                  autoComplete="off"
+                  placeholder="Optional. Not stored."
+                  className="w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-2 font-mono text-sm text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)] focus:border-[var(--color-accent)]"
+                />
+                <p className="mt-1.5 text-xs text-[var(--color-text-faint)]">
+                  The token is sent once to the API and is not saved in the browser or the analysis record. Public repositories do not need one.
+                </p>
+              </div>
             </div>
           ) : (
             <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-[var(--color-border-strong)] px-6 py-10 text-center hover:border-[var(--color-accent)] hover:bg-[var(--color-surface-2)]">
               <Upload size={22} className="text-[var(--color-text-faint)]" />
-              <span className="text-sm text-[var(--color-text)]">
-                {fileName ? fileName : 'Click to choose a .zip archive'}
-              </span>
+              <span className="text-sm text-[var(--color-text)]">{file ? file.name : 'Click to choose a .zip archive'}</span>
               <span className="text-xs text-[var(--color-text-faint)]">
-                ZIP repository analysis will be available in a future version.
+                {file ? `${Math.ceil(file.size / 1024)} KB selected` : 'The archive is extracted on the server and analyzed with the same pipeline.'}
               </span>
-              <input type="file" accept=".zip" className="hidden" onChange={handleFileChange} />
+              <input type="file" accept=".zip,application/zip" className="hidden" onChange={handleFileChange} />
             </label>
           )}
 
@@ -137,11 +151,13 @@ export function Analyze() {
             <LoaderCircle size={18} className="animate-spin text-[var(--color-accent)]" />
             <div>
               <h3 className="font-display text-sm font-semibold text-[var(--color-text)]">
-                Creating analysis job…
+                {source === 'upload' ? 'Uploading archive…' : 'Creating analysis job…'}
               </h3>
-              <p className="mt-1 font-mono text-xs text-[var(--color-text-faint)]">{githubUrl}</p>
+              <p className="mt-1 font-mono text-xs text-[var(--color-text-faint)]">
+                {source === 'upload' ? file?.name : githubUrl}
+              </p>
               <p className="mt-1 text-xs text-[var(--color-text-faint)]">
-                This queues a job only. Repository analysis has not run.
+                The dashboard follows acquisition and analyzer status after the job is created.
               </p>
             </div>
           </div>

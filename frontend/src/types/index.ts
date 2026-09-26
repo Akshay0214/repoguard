@@ -174,8 +174,10 @@ export interface AnalysisHistoryEntry {
 export interface AnalyzeRequest {
   source: 'github' | 'upload';
   githubUrl?: string;
+  file?: File;
   fileName?: string;
   branch?: string;
+  githubToken?: string;
 }
 
 export interface AnalysisProgressStep {

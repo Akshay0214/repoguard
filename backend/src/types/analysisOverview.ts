@@ -1,12 +1,15 @@
-import type { HistoryDepth } from './gitHistory.js';
+import type { AnalysisSourceType } from './analysis.js';
 import type { AnalysisModuleStatus, RepositoryAnalysisStatus } from './analysisStatus.js';
+import type { HistoryDepth } from './gitHistory.js';
+import type { RepositoryHealth } from './health.js';
 import type { StaticFinding, StaticSeverity } from './staticAnalysis.js';
+import type { TechnicalDebtReport } from './technicalDebt.js';
 
 export interface OverviewRepository {
   name: string;
   owner: string | null;
   branch: string;
-  sourceType: 'github';
+  sourceType: AnalysisSourceType;
   repositoryUrl: string;
 }
 
@@ -90,4 +93,6 @@ export interface RepositoryOverview {
   dependencies: OverviewDependencies | null;
   static: OverviewStatic | null;
   history: OverviewHistory | null;
+  health: RepositoryHealth;
+  debt: TechnicalDebtReport | null;
 }

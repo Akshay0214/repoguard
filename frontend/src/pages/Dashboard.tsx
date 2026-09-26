@@ -10,8 +10,12 @@ import { useAnalysis } from '@/context/analysisState';
 import { ApiError } from '@/services/apiClient';
 import { formatNumber } from '@/lib/format';
 import {
+  downloadAnalysisReport,
+  downloadAnalysisReportHtml,
   getAnalysisOverview,
+  getRepositoryAiInterpretation,
   type AnalysisOverview,
+  type FileAiInterpretation,
   type RepositoryReadinessStatus,
 } from '@/services/repositoryService';
 
@@ -23,14 +27,6 @@ const MODULE_LABELS: Record<keyof AnalysisOverview['readiness']['modules'], stri
   static: 'Static analysis',
   history: 'Git history',
 };
-
-const UNAVAILABLE_METRICS = [
-  'Health score',
-  'Technical debt',
-  'Health trend',
-  'Risk ranking',
-  'AI insight',
-];
 
 function statusLabel(status: RepositoryReadinessStatus | 'preparing'): string {
   if (status === 'preparing' || status === 'queued' || status === 'acquiring') return 'Preparing repository…';
@@ -161,7 +157,7 @@ export function Dashboard() {
     <div>
       <PageHeader
         title="Repository Overview"
-        description="Repository identity and factual module counts come from the analysis overview. Scores, trends, and rankings are not available yet."
+        description="Counts, heuristic indicators, and repository AI come from the analysis APIs."
         actions={<Badge>{statusLabel(phase)}</Badge>}
       />
 
@@ -264,14 +260,192 @@ export function Dashboard() {
               </Link>
             );
           })}
-          {UNAVAILABLE_METRICS.map((label) => (
-            <div key={label} className="rounded-md border border-[var(--color-border)] px-3 py-3">
-              <p className="text-xs text-[var(--color-text-faint)]">{label}</p>
-              <p className="mt-1 text-sm text-[var(--color-text)]">Not available yet</p>
+        </div>
+      </Card>
+
+      {overview?.health && (
+        <Card className="mt-4">
+          <CardHeader>
+            <div>
+              <CardTitle>
+                Heuristic indicator {overview.health.heuristicScore === null ? 'unavailable' : overview.health.heuristicScore}
+              </CardTitle>
+              <CardDescription>{overview.health.disclaimer}</CardDescription>
             </div>
-          ))}
+          </CardHeader>
+          <p className="mb-3 text-xs text-[var(--color-text-faint)]">{overview.health.formula}</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {overview.health.indicators.map((item) => (
+              <div key={item.id} className="rounded-md border border-[var(--color-border)] px-3 py-3">
+                <p className="text-xs text-[var(--color-text-faint)]">{item.label}</p>
+                <p className="mt-1 text-sm text-[var(--color-text)]">
+                  {item.available ? String(item.value) : 'Unavailable'}
+                </p>
+              </div>
+            ))}
+          </div>
+          {overview.health.omittedInputs.length > 0 && (
+            <p className="mt-3 text-sm text-[var(--color-text-muted)]">
+              Omitted inputs: {overview.health.omittedInputs.join(', ')}
+            </p>
+          )}
+        </Card>
+      )}
+
+      {overview?.debt && (
+        <Card className="mt-4">
+          <CardHeader>
+            <div>
+              <CardTitle>Technical debt indicators</CardTitle>
+              <CardDescription>
+                {overview.debt.summary.itemCount} indicators, estimated contribution {overview.debt.summary.estimatedContribution}.{' '}
+                {overview.debt.disclaimer}
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <Link to="/technical-debt">
+            <Button size="sm" variant="secondary">Open indicators</Button>
+          </Link>
+        </Card>
+      )}
+
+      <RepositoryAi
+        analysisId={currentAnalysis.analysisId}
+        ready={phase === 'ready' || phase === 'partial'}
+      />
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Report</CardTitle>
+        </CardHeader>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              void downloadAnalysisReport(currentAnalysis.analysisId).then((report) => {
+                const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = 'repoguard-report.json';
+                anchor.click();
+                URL.revokeObjectURL(url);
+              });
+            }}
+          >
+            Download JSON
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              void downloadAnalysisReportHtml(currentAnalysis.analysisId).then((html) => {
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank', 'noopener');
+              });
+            }}
+          >
+            Open printable HTML
+          </Button>
         </div>
       </Card>
     </div>
   );
+}
+
+function RepositoryAi({ analysisId, ready }: { analysisId: string; ready: boolean }) {
+  const [interpretation, setInterpretation] = useState<FileAiInterpretation | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!ready) return undefined;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void getRepositoryAiInterpretation(analysisId)
+      .then((next) => {
+        if (!cancelled) setInterpretation(next);
+      })
+      .catch((caught: unknown) => {
+        if (cancelled) return;
+        setError(repositoryAiMessage(caught));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [analysisId, ready]);
+
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <div>
+          <CardTitle>Repository AI interpretation</CardTitle>
+          <CardDescription>
+            Observations are rendered by the server from evidence pointers. Interpretation text is the model and is not a fact.
+          </CardDescription>
+        </div>
+      </CardHeader>
+      {!ready ? (
+        <p className="text-sm text-[var(--color-text-muted)]">Waiting until analysis evidence is ready.</p>
+      ) : loading ? (
+        <p className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+          <LoaderCircle size={14} className="animate-spin text-[var(--color-accent)]" />
+          Requesting repository interpretation…
+        </p>
+      ) : error ? (
+        <p className="text-sm text-[var(--color-text)]">{error}</p>
+      ) : interpretation ? (
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-[var(--color-text)]">{interpretation.summary}</p>
+          <ul className="space-y-3">
+            {interpretation.observations.map((observation, index) => (
+              <li key={`${observation.category}:${index}`} className="rounded-md border border-[var(--color-border)] px-3 py-3">
+                <div className="flex flex-wrap gap-2">
+                  <Badge>{observation.category}</Badge>
+                  <Badge>{observation.confidence} confidence</Badge>
+                </div>
+                <p className="mt-2 text-sm text-[var(--color-text)]">{observation.observation}</p>
+                <p className="mt-2 text-sm text-[var(--color-text-muted)]">Interpretation: {observation.interpretation}</p>
+                <ul className="mt-2 space-y-1 text-xs text-[var(--color-text-muted)]">
+                  {observation.evidence.map((item, evidenceIndex) => (
+                    <li key={`${item.source}:${item.field}:${evidenceIndex}`}>
+                      {item.source}.{item.field}
+                      {item.index === null ? '' : `[${item.index}]`}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+          <div>
+            <h3 className="text-sm font-medium text-[var(--color-text)]">Limitations</h3>
+            <ul className="mt-2 space-y-1 text-sm text-[var(--color-text-muted)]">
+              {interpretation.limitations.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+function repositoryAiMessage(caught: unknown): string {
+  if (!(caught instanceof ApiError)) return 'AI interpretation is temporarily unavailable.';
+  if (caught.code === 'AI_NOT_CONFIGURED') {
+    return 'AI interpretation is not configured.';
+  }
+  if (caught.code === 'AI_TIMEOUT' || caught.status === 504) return 'AI interpretation timed out.';
+  if (caught.code === 'AI_RESPONSE_INVALID' || caught.status === 502) return 'AI interpretation returned an invalid response.';
+  if (caught.code === 'AI_RATE_LIMIT') return 'AI interpretation is temporarily rate-limited.';
+  if (caught.status === 409) return 'Repository analysis is not ready.';
+  if (caught.status === 503) return caught.message || 'AI interpretation is temporarily unavailable.';
+  return caught.message || 'AI interpretation is temporarily unavailable.';
 }

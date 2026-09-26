@@ -11,9 +11,21 @@ export function createApp() {
   app.use(
     cors({
       origin: env.frontendUrl,
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-GitHub-Token'],
     }),
   );
-  app.use(express.json());
+  app.use(express.json({ limit: '1mb' }));
+  app.use((req, res, next) => {
+    res.setTimeout(env.requestTimeoutMs, () => {
+      if (!res.headersSent) {
+        res.status(504).json({
+          success: false,
+          error: { code: 'REQUEST_TIMEOUT', message: 'The request timed out.' },
+        });
+      }
+    });
+    next();
+  });
   app.use('/api', apiRouter);
   app.use(notFoundHandler);
   app.use(errorHandler);

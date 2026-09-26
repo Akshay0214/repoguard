@@ -320,7 +320,17 @@ function runGit(cwd: string, args: string[]): Promise<string> {
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: COMMAND_TIMEOUT_MS,
       env: {
-        ...process.env,
+        PATH: process.env.PATH,
+        SystemRoot: process.env.SystemRoot,
+        PATHEXT: process.env.PATHEXT,
+        HOME: process.env.HOME,
+        USERPROFILE: process.env.USERPROFILE,
+        HOMEDRIVE: process.env.HOMEDRIVE,
+        HOMEPATH: process.env.HOMEPATH,
+        TMP: process.env.TMP,
+        TEMP: process.env.TEMP,
+        LANG: process.env.LANG,
+        COMSPEC: process.env.COMSPEC,
         GIT_TERMINAL_PROMPT: '0',
       },
     });

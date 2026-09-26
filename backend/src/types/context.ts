@@ -11,7 +11,7 @@ export type ContextMode =
 export interface ContextRepository {
   name: string;
   branch: string;
-  sourceType: 'github';
+  sourceType: 'github' | 'zip';
 }
 
 export interface ContextLimitation {

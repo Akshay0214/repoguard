@@ -13,11 +13,13 @@ export interface AnalysisJob {
   repositoryUrl: string;
   repositoryName: string;
   branch: string;
-  sourceType: 'github';
+  sourceType: AnalysisSourceType;
   status: AnalysisStatus;
+  /** Account that owns this analysis. Never returned by the API. */
+  ownerId: string;
   createdAt: string;
   updatedAt: string;
-  /** Internal clone location. Never returned by the API. */
+  /** Internal workspace location. Never returned by the API or stored. */
   workspacePath?: string;
   acquisitionStartedAt?: string;
   acquisitionCompletedAt?: string;
@@ -25,4 +27,4 @@ export interface AnalysisJob {
 }
 
 /** Analysis job fields that are safe to return to clients. */
-export type PublicAnalysisJob = Omit<AnalysisJob, 'workspacePath'>;
+export type PublicAnalysisJob = Omit<AnalysisJob, 'workspacePath' | 'ownerId'>;

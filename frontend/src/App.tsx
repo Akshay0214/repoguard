@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from '@/context/AuthContext';
 import { AnalysisProvider } from '@/context/AnalysisContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Landing } from '@/pages/Landing';
@@ -14,7 +15,8 @@ import { NotFound } from '@/pages/NotFound';
 
 export default function App() {
   return (
-    <AnalysisProvider>
+    <AuthProvider>
+      <AnalysisProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
@@ -33,6 +35,7 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
-    </AnalysisProvider>
+      </AnalysisProvider>
+    </AuthProvider>
   );
 }

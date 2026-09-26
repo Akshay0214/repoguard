@@ -24,7 +24,18 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return;
   }
 
-  console.error(err);
+  if (typeof err === 'object' && err !== null && 'name' in err && (err as { name?: string }).name === 'MulterError') {
+    res.status(413).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'The upload exceeds the size limit.',
+      },
+    });
+    return;
+  }
+
+  console.error(err instanceof Error ? err.name : 'Unhandled error');
   res.status(500).json({
     success: false,
     error: {

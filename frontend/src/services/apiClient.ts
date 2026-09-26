@@ -1,4 +1,25 @@
+function authHeaders(): Record<string, string> {
+  const token = authToken ?? (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(TOKEN_KEY) : null);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+const TOKEN_KEY = 'repoguard.token';
 const DEFAULT_API_BASE_URL = 'http://localhost:4000/api';
+let authToken: string | null = null;
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+  if (typeof sessionStorage === 'undefined') return;
+  if (token) sessionStorage.setItem(TOKEN_KEY, token);
+  else sessionStorage.removeItem(TOKEN_KEY);
+}
+
+export function getAuthToken(): string | null {
+  if (authToken) return authToken;
+  if (typeof sessionStorage === 'undefined') return null;
+  authToken = sessionStorage.getItem(TOKEN_KEY);
+  return authToken;
+}
 
 export const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL
@@ -42,7 +63,7 @@ async function requestJson(path: string, init: RequestInit, fallbackMessage: str
   try {
     response = await fetch(joinUrl(path), {
       ...init,
-      headers: { Accept: 'application/json', ...init.headers },
+      headers: { Accept: 'application/json', ...authHeaders(), ...init.headers },
     });
   } catch {
     throw new ApiError('Unable to reach the RepoGuard API. Check that the backend is running.', 0);
@@ -69,13 +90,29 @@ export async function postJson(
   path: string,
   body: unknown,
   fallbackMessage = 'Unable to start repository analysis. Please check the repository URL and try again.',
+  headers: Record<string, string> = {},
 ): Promise<unknown> {
   return requestJson(
     path,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(body),
+    },
+    fallbackMessage,
+  );
+}
+
+export async function postForm(
+  path: string,
+  body: FormData,
+  fallbackMessage = 'The ZIP archive could not be uploaded.',
+): Promise<unknown> {
+  return requestJson(
+    path,
+    {
+      method: 'POST',
+      body,
     },
     fallbackMessage,
   );
@@ -83,4 +120,21 @@ export async function postJson(
 
 export async function getJson(path: string): Promise<unknown> {
   return requestJson(path, { method: 'GET' }, 'The analysis status could not be loaded.');
+}
+
+export async function getText(path: string): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(joinUrl(path), {
+      method: 'GET',
+      headers: { ...authHeaders() },
+    });
+  } catch {
+    throw new ApiError('Unable to reach the RepoGuard API. Check that the backend is running.', 0);
+  }
+  const text = await response.text();
+  if (!response.ok) {
+    throw new ApiError('The report could not be downloaded.', response.status);
+  }
+  return text;
 }

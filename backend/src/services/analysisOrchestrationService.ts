@@ -12,12 +12,16 @@ import type { AstAnalysisResult } from '../types/ast.js';
 import type { DependencyAnalysisResult } from '../types/dependency.js';
 import type { GitHistoryResult } from '../types/gitHistory.js';
 import type { StaticAnalysisResult, StaticFinding } from '../types/staticAnalysis.js';
+import type { TechnicalDebtReport } from '../types/technicalDebt.js';
 import { getAnalysisJob } from './analysisService.js';
+import { saveStoredAnalysisResults } from './analysisResultStore.js';
 import { analyzeAcquiredRepository } from './astAnalysisService.js';
 import { analyzeAcquiredDependencies } from './dependencyAnalysisService.js';
 import { analyzeAcquiredGitHistory, GitHistoryError } from './gitHistoryAnalysisService.js';
+import { buildRepositoryHealth } from './healthIndicatorService.js';
 import { analysisWorkspacePath } from './repositoryAcquisitionService.js';
 import { analyzeAcquiredStatic, StaticAnalysisUnavailableError } from './staticAnalysisService.js';
+import { estimateTechnicalDebt } from './technicalDebtService.js';
 
 /**
  * Tracks whether the four repository analyzers have finished.
@@ -32,6 +36,13 @@ interface ModuleRecord {
   limitations: string[];
 }
 
+interface AnalysisEvidence {
+  ast: AstAnalysisResult | null;
+  dependencies: DependencyAnalysisResult | null;
+  staticAnalysis: StaticAnalysisResult | null;
+  history: GitHistoryResult | null;
+}
+
 interface AnalysisRun {
   modules: Record<ModuleName, ModuleRecord>;
   ast: OverviewAst | null;
@@ -39,6 +50,9 @@ interface AnalysisRun {
   static: OverviewStatic | null;
   history: OverviewHistory | null;
   staticFindings: StaticFinding[] | null;
+  evidence: AnalysisEvidence;
+  debt: TechnicalDebtReport | null;
+  restoredLimitations: string[] | null;
 }
 
 export interface RepositoryStaticIssues {
@@ -81,6 +95,9 @@ export function beginRepositoryAnalysis(analysisId: string): void {
     static: null,
     history: null,
     staticFindings: null,
+    evidence: emptyEvidence(),
+    debt: null,
+    restoredLimitations: null,
   };
   runs.set(analysisId, run);
   void settle(run, analysisId, workspace);
@@ -109,6 +126,21 @@ export function readRepositoryOverview(job: AnalysisJob): RepositoryOverview {
     dependencies: run?.dependencies ?? null,
     static: run?.static ?? null,
     history: run?.history ?? null,
+    health: buildRepositoryHealth(
+      {
+        ast: run?.ast ?? null,
+        dependencies: run?.dependencies ?? null,
+        static: run?.static ?? null,
+        history: run?.history ?? null,
+        readiness: {
+          status,
+          modules: readiness.modules,
+          limitations: readiness.limitations,
+        },
+      },
+      run?.debt ?? null,
+    ),
+    debt: run?.debt ?? null,
   };
 }
 
@@ -159,6 +191,7 @@ export function readRepositoryAnalysisStatus(job: AnalysisJob): AnalysisReadines
 async function settle(run: AnalysisRun, analysisId: string, workspace: string): Promise<void> {
   await Promise.all([
     finish(run, 'ast', workspace, analyzeAcquiredRepository(analysisId, workspace), astLimitations, (result) => {
+      run.evidence.ast = result;
       run.ast = {
         totalFiles: result.summary.totalFiles,
         totalLines: result.summary.totalLines,
@@ -174,6 +207,7 @@ async function settle(run: AnalysisRun, analysisId: string, workspace: string): 
       };
     }),
     finish(run, 'dependencies', workspace, analyzeAcquiredDependencies(analysisId, workspace), dependencyLimitations, (result) => {
+      run.evidence.dependencies = result;
       run.dependencies = {
         totalInternalNodes: result.summary.totalInternalNodes,
         totalInternalEdges: result.summary.totalInternalEdges,
@@ -188,10 +222,12 @@ async function settle(run: AnalysisRun, analysisId: string, workspace: string): 
       };
     }),
     finish(run, 'static', workspace, analyzeAcquiredStatic(analysisId, workspace), staticLimitations, (result) => {
+      run.evidence.staticAnalysis = result;
       run.staticFindings = result.findings;
       run.static = staticOverview(result);
     }),
     finish(run, 'history', workspace, analyzeAcquiredGitHistory(analysisId, workspace), historyLimitations, (result) => {
+      run.evidence.history = result;
       run.history = {
         availableCommits: result.summary.availableCommits,
         uniqueAuthors: result.summary.uniqueAuthors,
@@ -204,6 +240,29 @@ async function settle(run: AnalysisRun, analysisId: string, workspace: string): 
       };
     }),
   ]);
+  const job = getAnalysisJob(analysisId);
+  if (!job) return;
+  const unavailable = MODULES.filter((name) => run.modules[name].status === 'failed').map(
+    (name) => run.modules[name].limitations[0] ?? `${name} analysis failed.`,
+  );
+  run.debt = estimateTechnicalDebt(analysisId, {
+    ast: run.evidence.ast,
+    dependencies: run.evidence.dependencies,
+    staticAnalysis: run.evidence.staticAnalysis,
+    history: run.evidence.history,
+    unavailable,
+  });
+  const overview = readRepositoryOverview(job);
+  const issues = readRepositoryStaticIssues(job);
+  saveStoredAnalysisResults(job, {
+    overview,
+    issues: issues.state === 'ready' ? issues.issues : null,
+    ast: run.evidence.ast,
+    dependencies: run.evidence.dependencies,
+    history: run.evidence.history,
+    staticAnalysis: run.evidence.staticAnalysis,
+    debt: run.debt,
+  });
 }
 
 async function finish<T>(
@@ -321,9 +380,66 @@ function overallStatus(job: AnalysisJob, modules: AnalysisReadiness['modules']):
 
 function limitationsFor(job: AnalysisJob, run: AnalysisRun | undefined): string[] {
   if (job.status === 'failed') return job.errorMessage ? [job.errorMessage] : ['Repository acquisition failed.'];
-  if (job.status === 'ready' && !job.workspacePath) return ['Acquired workspace is no longer available.'];
+  if (job.status === 'ready' && !job.workspacePath && run?.restoredLimitations) return run.restoredLimitations;
+  if (job.status === 'ready' && !job.workspacePath && !run) return ['Acquired workspace is no longer available.'];
   if (!run) return [];
+  if (run.restoredLimitations && !job.workspacePath) return run.restoredLimitations;
   return MODULES.flatMap((name) => run.modules[name].limitations);
+}
+
+export function readTechnicalDebt(
+  job: AnalysisJob,
+):
+  | { state: 'pending' }
+  | { state: 'failed'; message: string }
+  | { state: 'ready'; report: TechnicalDebtReport } {
+  const readiness = readRepositoryAnalysisStatus(job);
+  if (job.status === 'failed') {
+    return { state: 'failed', message: job.errorMessage ?? 'Repository acquisition failed.' };
+  }
+  if (readiness.status === 'queued' || readiness.status === 'acquiring' || readiness.status === 'analyzing') {
+    return { state: 'pending' };
+  }
+  const run = runs.get(job.analysisId);
+  if (!run?.debt) return { state: 'pending' };
+  return { state: 'ready', report: run.debt };
+}
+
+export function restoreCompletedAnalysis(
+  analysisId: string,
+  restored: {
+    ast: OverviewAst | null;
+    dependencies: OverviewDependencies | null;
+    static: OverviewStatic | null;
+    history: OverviewHistory | null;
+    staticFindings: StaticFinding[] | null;
+    evidence: AnalysisEvidence;
+    debt: TechnicalDebtReport | null;
+    modules: AnalysisReadiness['modules'];
+    limitations: string[];
+  },
+): void {
+  if (runs.has(analysisId)) return;
+  runs.set(analysisId, {
+    modules: {
+      ast: { status: restored.modules.ast, limitations: [] },
+      dependencies: { status: restored.modules.dependencies, limitations: [] },
+      static: { status: restored.modules.static, limitations: [] },
+      history: { status: restored.modules.history, limitations: [] },
+    },
+    ast: restored.ast,
+    dependencies: restored.dependencies,
+    static: restored.static,
+    history: restored.history,
+    staticFindings: restored.staticFindings,
+    evidence: restored.evidence,
+    debt: restored.debt,
+    restoredLimitations: restored.limitations,
+  });
+}
+
+function emptyEvidence(): AnalysisEvidence {
+  return { ast: null, dependencies: null, staticAnalysis: null, history: null };
 }
 
 function moduleSnapshot(run: AnalysisRun): AnalysisReadiness['modules'] {
