@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildRepositoryHealth, HEALTH_SCORE_FORMULA } from '../src/services/healthIndicatorService.js';
 import { DEBT_WEIGHTS, estimateTechnicalDebt } from '../src/services/technicalDebtService.js';
+import type { GitHistoryResult } from '../src/types/gitHistory.js';
 import type { StaticFinding } from '../src/types/staticAnalysis.js';
 
 const finding: StaticFinding = {
@@ -99,6 +100,69 @@ test('technical debt indicators are deterministic and map to evidence', () => {
   assert.match(first.limitations.join(' '), /shallow|unavailable|change-frequency/i);
   assert.match(first.disclaimer, /not a scientifically validated/i);
 });
+
+test('shallow git history does not add change-frequency indicators', () => {
+  const report = estimateTechnicalDebt('debt-shallow', {
+    ast: null,
+    dependencies: null,
+    staticAnalysis: null,
+    history: historyFixture('shallow', false),
+    unavailable: [],
+  });
+  assert.equal(report.items.some((item) => item.indicator === 'change-frequency'), false);
+  assert.match(report.limitations.join(' '), /shallow or incomplete/i);
+});
+
+test('complete git history keeps change-frequency contribution', () => {
+  const report = estimateTechnicalDebt('debt-complete', {
+    ast: null,
+    dependencies: null,
+    staticAnalysis: null,
+    history: historyFixture('complete', true),
+    unavailable: [],
+  });
+  const change = report.items.find((item) => item.indicator === 'change-frequency');
+  assert.equal(change?.affectedFile, 'src/app.js');
+  assert.equal(change?.contribution, DEBT_WEIGHTS.changeContribution);
+  assert.doesNotMatch(report.limitations.join(' '), /shallow or incomplete/i);
+});
+
+function historyFixture(historyDepth: 'shallow' | 'complete', isComplete: boolean): GitHistoryResult {
+  return {
+    summary: {
+      availableCommits: 3,
+      uniqueAuthors: 1,
+      totalFileChanges: 3,
+      totalAdditions: 3,
+      totalDeletions: 0,
+      oldestAvailableCommitAt: '2020-01-01T00:00:00.000Z',
+      newestAvailableCommitAt: '2020-01-03T00:00:00.000Z',
+      historyDepth,
+      isComplete,
+      commitsWithoutFileDiff: isComplete ? 0 : 1,
+      cloneCommitCount: 3,
+      truncated: false,
+      commitLimit: null,
+    },
+    commits: [],
+    authors: [],
+    files: [
+      {
+        path: 'src/app.js',
+        commitCount: 3,
+        additions: 3,
+        deletions: 0,
+        changeCount: 3,
+        firstSeenAt: '2020-01-01T00:00:00.000Z',
+        lastChangedAt: '2020-01-03T00:00:00.000Z',
+        presentInWorkTree: true,
+        renamedFrom: null,
+      },
+    ],
+    mostChangedFiles: [],
+    errors: [],
+  };
+}
 
 test('health indicators use the documented heuristic and omit missing modules', () => {
   const health = buildRepositoryHealth(

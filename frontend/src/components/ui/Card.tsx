@@ -12,7 +12,7 @@ export function Card({ children, className, padded = true, interactive = false, 
     <div
       className={cn(
         'rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]',
-        padded && 'p-5',
+        padded && 'p-4',
         interactive && 'transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-hover)] cursor-pointer',
         className,
       )}

@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GitBranch, Upload, ScanSearch, LoaderCircle } from 'lucide-react';
+import { Upload, ScanSearch, LoaderCircle } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { cn } from '@/lib/cn';
 import { toCurrentAnalysis, useAnalysis } from '@/context/analysisState';
 import { ApiError } from '@/services/apiClient';
 import { analyzeRepository } from '@/services/repositoryService';
@@ -19,25 +18,36 @@ export function Analyze() {
   const [branch, setBranch] = useState('main');
   const [githubToken, setGithubToken] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canAnalyze = source === 'github' ? githubUrl.trim().length > 0 : Boolean(file);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const next = e.target.files?.[0] ?? null;
+  const acceptZip = (next: File | null) => {
+    if (!next) return;
+    const isZip = next.name.toLowerCase().endsWith('.zip') || next.type === 'application/zip' || next.type === 'application/x-zip-compressed';
+    if (!isZip) {
+      setFile(null);
+      setError('Choose a .zip archive.');
+      return;
+    }
+    setError(null);
     setFile(next);
   };
 
-  const handleAnalyze = async () => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    acceptZip(e.target.files?.[0] ?? null);
+  };
+
+  const handleAnalyze = async (nextSource: Source) => {
+    setSource(nextSource);
     setError(null);
     setRunning(true);
     try {
       const job = await analyzeRepository({
-        source,
+        source: nextSource,
         githubUrl,
         branch,
-        githubToken: source === 'github' ? githubToken : undefined,
+        githubToken: nextSource === 'github' ? githubToken : undefined,
         file: file ?? undefined,
         fileName: file?.name,
       });
@@ -55,37 +65,18 @@ export function Analyze() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div>
       <PageHeader
-        title="Analyze Repository"
-        description="Create an analysis job from a public or private GitHub repository, or from a ZIP archive."
+        title="Analyze a repository"
+        description="Analyze source structure, static findings, dependencies, Git history, technical-debt indicators, and AI-assisted interpretations."
       />
 
       {!running && (
-        <Card>
-          <div className="mb-5 grid grid-cols-2 gap-2 rounded-md bg-[var(--color-surface-2)] p-1">
-            <button
-              onClick={() => setSource('github')}
-              className={cn(
-                'flex items-center justify-center gap-2 rounded py-2 text-sm transition-colors',
-                source === 'github' ? 'bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-border-strong)]' : 'text-[var(--color-text-muted)]',
-              )}
-            >
-              <GitBranch size={14} /> GitHub URL
-            </button>
-            <button
-              onClick={() => setSource('upload')}
-              className={cn(
-                'flex items-center justify-center gap-2 rounded py-2 text-sm transition-colors',
-                source === 'upload' ? 'bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-border-strong)]' : 'text-[var(--color-text-muted)]',
-              )}
-            >
-              <Upload size={14} /> Upload ZIP
-            </button>
-          </div>
-
-          {source === 'github' ? (
-            <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <h2 className="font-display text-sm font-semibold text-[var(--color-text)]">GitHub repository</h2>
+            <p className="mt-1 text-sm text-[var(--color-text-muted)]">Public repositories do not need a token.</p>
+            <div className="mt-4 space-y-4">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-muted)]">Repository URL</label>
                 <input
@@ -121,28 +112,46 @@ export function Analyze() {
                 </p>
               </div>
             </div>
-          ) : (
-            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-[var(--color-border-strong)] px-6 py-10 text-center hover:border-[var(--color-accent)] hover:bg-[var(--color-surface-2)]">
+              <Button className="mt-4 w-full gap-2" disabled={githubUrl.trim().length === 0 || running} onClick={() => void handleAnalyze('github')}>
+                <ScanSearch size={16} />
+                Analyze repository
+              </Button>
+          </Card>
+          <Card>
+            <h2 className="font-display text-sm font-semibold text-[var(--color-text)]">ZIP upload</h2>
+            <p className="mt-1 text-sm text-[var(--color-text-muted)]">The archive is extracted on the server and analyzed with the same pipeline.</p>
+            <label
+              className={`mt-4 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed px-6 py-10 text-center ${dragOver ? 'border-[var(--color-accent)] bg-[var(--color-surface-2)]' : 'border-[var(--color-border-strong)] hover:border-[var(--color-accent)] hover:bg-[var(--color-surface-2)]'}`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragOver(false);
+                acceptZip(event.dataTransfer.files?.[0] ?? null);
+              }}
+            >
               <Upload size={22} className="text-[var(--color-text-faint)]" />
-              <span className="text-sm text-[var(--color-text)]">{file ? file.name : 'Click to choose a .zip archive'}</span>
-              <span className="text-xs text-[var(--color-text-faint)]">
-                {file ? `${Math.ceil(file.size / 1024)} KB selected` : 'The archive is extracted on the server and analyzed with the same pipeline.'}
-              </span>
+              <span className="text-sm text-[var(--color-text)]">{file ? file.name : 'Drop a repository ZIP here'}</span>
+              <span className="text-xs text-[var(--color-text-faint)]">{file ? `${Math.ceil(file.size / 1024)} KB` : 'or choose a file'}</span>
               <input type="file" accept=".zip,application/zip" className="hidden" onChange={handleFileChange} />
             </label>
-          )}
-
-          {error && (
-            <p role="alert" className="mt-4 text-sm text-[var(--color-critical)]">
-              {error}
-            </p>
-          )}
-
-          <Button className="mt-6 w-full gap-2" size="lg" disabled={!canAnalyze || running} onClick={handleAnalyze}>
-            <ScanSearch size={16} />
-            Analyze Repository
-          </Button>
-        </Card>
+            {file && (
+              <button type="button" className="mt-2 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]" onClick={() => setFile(null)}>
+                Remove file
+              </button>
+            )}
+            <Button className="mt-4 w-full gap-2" variant="secondary" disabled={!file || running} onClick={() => void handleAnalyze('upload')}>
+              <Upload size={16} />
+              Analyze ZIP
+            </Button>
+          </Card>
+        </div>
+      )}
+      {error && !running && (
+        <p role="alert" className="mt-4 text-sm text-[var(--color-critical)]">{error}</p>
       )}
 
       {running && (

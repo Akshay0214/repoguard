@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/context/AuthContext';
 import { ApiError } from '@/services/apiClient';
+
+const fieldClass =
+  'mt-1 w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]';
 
 export function Settings() {
   const { user, ready, login, register, logout } = useAuth();
@@ -28,34 +29,34 @@ export function Settings() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <PageHeader
-        title="Settings"
-        description="Account session only. Nothing here changes analyzer rules, model settings, or repository evidence."
-      />
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>Account</CardTitle>
-            <CardDescription>
-              {ready
-                ? user
-                  ? `Signed in as ${user.email}. Analyses you create are visible only to this account.`
-                  : 'Development can run without an account. Sign in when authentication is enabled.'
-                : 'Checking session…'}
-            </CardDescription>
+    <div className="max-w-xl">
+      <h1 className="font-display text-xl font-semibold text-[var(--color-text)]">Settings</h1>
+      <p className="mt-1.5 text-sm text-[var(--color-text-muted)]">
+        Account session for this application. Development can run without signing in. This is not an enterprise security console.
+      </p>
+
+      <section className="mt-6 border-t border-[var(--color-border)] pt-5">
+        <h2 className="text-base font-semibold text-[var(--color-text)]">Account</h2>
+        {!ready ? (
+          <p className="mt-3 text-sm text-[var(--color-text-muted)]">Checking session…</p>
+        ) : user ? (
+          <div className="mt-3">
+            <p className="text-sm text-[var(--color-text)]">{user.email}</p>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">Signed in. Analyses created with this session belong to this account.</p>
+            <Button
+              className="mt-4"
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                void logout();
+              }}
+            >
+              Log out
+            </Button>
           </div>
-        </CardHeader>
-        {user ? (
-          <Button
-            onClick={() => {
-              void logout();
-            }}
-          >
-            Log out
-          </Button>
         ) : (
-          <div className="space-y-4">
+          <div className="mt-3 space-y-3">
+            <p className="text-sm text-[var(--color-text-muted)]">Not signed in. A local development session can analyze a repository without an account.</p>
             <div className="flex gap-2">
               <Button size="sm" variant={mode === 'login' ? 'primary' : 'secondary'} onClick={() => setMode('login')}>
                 Log in
@@ -66,11 +67,7 @@ export function Settings() {
             </div>
             <label className="block text-xs text-[var(--color-text-muted)]">
               Email
-              <input
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="mt-1 w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-2 text-sm"
-              />
+              <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" className={fieldClass} />
             </label>
             <label className="block text-xs text-[var(--color-text-muted)]">
               Password
@@ -78,16 +75,24 @@ export function Settings() {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="mt-1 w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg)] px-3 py-2 text-sm"
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                className={fieldClass}
               />
             </label>
-            {error && <p className="text-sm text-[var(--color-critical)]">{error}</p>}
+            {error && <p role="alert" className="text-sm text-[var(--color-critical)]">{error}</p>}
             <Button disabled={pending || !email || password.length < 8} onClick={() => void submit()}>
               {pending ? 'Working…' : mode === 'login' ? 'Log in' : 'Create account'}
             </Button>
           </div>
         )}
-      </Card>
+      </section>
+
+      <section className="mt-6 border-t border-[var(--color-border)] pt-5">
+        <h2 className="text-base font-semibold text-[var(--color-text)]">Application</h2>
+        <p className="mt-2 text-sm text-[var(--color-text-muted)]">
+          Analyzer rules, model selection, and evidence thresholds are not changed from this screen. GitHub tokens, API keys, and database credentials are not displayed.
+        </p>
+      </section>
     </div>
   );
 }

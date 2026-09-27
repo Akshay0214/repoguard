@@ -552,7 +552,10 @@ export async function getTechnicalDebt(req: Request, res: Response): Promise<voi
   }
   const result = readTechnicalDebt(job);
   if (result.state === 'failed') {
-    throw new HttpError(409, 'ACQUISITION_NOT_READY', result.message);
+    throw new HttpError(422, 'ACQUISITION_FAILED', result.message);
+  }
+  if (result.state === 'unavailable') {
+    throw new HttpError(422, 'DEBT_UNAVAILABLE', result.message);
   }
   if (result.state === 'pending') {
     throw new HttpError(409, 'DEBT_NOT_READY', 'Technical debt indicators are not ready yet.');

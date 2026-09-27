@@ -29,7 +29,7 @@ export function StatCard({
         )}
       </div>
       <div className="flex items-baseline gap-2">
-        <span className="font-display text-2xl font-semibold text-[var(--color-text)]">{value}</span>
+        <span className="font-display text-xl font-semibold tracking-tight text-[var(--color-text)]">{value}</span>
       </div>
       {hint && <span className="text-xs text-[var(--color-text-faint)]">{hint}</span>}
     </Card>

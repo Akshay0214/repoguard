@@ -1,8 +1,4 @@
-// Core domain types for RepoGuard.
-// These model the shape of data the backend/AI pipeline will eventually
-// return. The mock data layer and service layer are built against these
-// same types, so swapping mock functions for real API calls later
-// requires no changes on the consuming (component) side.
+// Shared frontend types. Live pages read analyzer results from the API.
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low';
 

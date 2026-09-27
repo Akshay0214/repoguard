@@ -10,6 +10,7 @@ import { IssueDetail } from '@/pages/IssueDetail';
 import { TechnicalDebt } from '@/pages/TechnicalDebt';
 import { Dependencies } from '@/pages/Dependencies';
 import { History } from '@/pages/History';
+import { Reports } from '@/pages/Reports';
 import { Settings } from '@/pages/Settings';
 import { NotFound } from '@/pages/NotFound';
 
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="/technical-debt" element={<TechnicalDebt />} />
             <Route path="/dependencies" element={<Dependencies />} />
             <Route path="/history" element={<History />} />
+            <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
 

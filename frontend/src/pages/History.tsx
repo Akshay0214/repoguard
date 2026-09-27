@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
-import { GitCommitHorizontal, History as HistoryIcon, Users } from 'lucide-react';
+import { History as HistoryIcon } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
-import { StatCard } from '@/components/ui/StatCard';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { useAnalysis } from '@/context/analysisState';
 import { formatDateTime, formatNumber } from '@/lib/format';
@@ -68,7 +66,7 @@ export function History() {
     return (
       <div>
         <PageHeader
-          title="Git history"
+          title="Git History"
           description="Commits, authors, and file changes from the available Git history. These are repository evidence, not quality or risk scores."
         />
         <EmptyState
@@ -80,12 +78,19 @@ export function History() {
     );
   }
 
+  const historyDescription = result
+    ? result.summary.historyDepth === 'shallow'
+      ? 'Shallow history · limited historical evidence'
+      : result.summary.historyDepth === 'limited'
+        ? 'Limited history · the configured commit or file cap was reached'
+        : result.summary.isComplete
+          ? 'Complete recorded history for this branch.'
+          : 'Incomplete history · limited historical evidence'
+    : `Git history evidence for ${currentAnalysis.repositoryName}. Counts describe the available clone.`;
+
   return (
     <div>
-      <PageHeader
-        title="Git history"
-        description={`Git history evidence for ${currentAnalysis.repositoryName}. Counts describe the available clone.`}
-      />
+      <PageHeader title="Git History" description={historyDescription} />
 
       {loading || preparing ? (
         <LoadingState label={preparing ? 'Preparing repository…' : 'Collecting Git history…'} />
@@ -108,92 +113,112 @@ export function History() {
 
 function HistoryEvidence({ result }: { result: GitHistoryResult }) {
   const { summary } = result;
-  const incomplete = summary.historyDepth === 'shallow' || !summary.isComplete;
+  const shallow = summary.historyDepth === 'shallow';
+  const missingDiffs = summary.commitsWithoutFileDiff > 0;
+  const recordedChangesAreZero =
+    summary.totalFileChanges === 0 && summary.totalAdditions === 0 && summary.totalDeletions === 0;
 
   return (
-    <div className="space-y-4">
-      {incomplete && (
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Available history is incomplete</CardTitle>
-              <CardDescription>
-                {summary.historyDepth === 'shallow'
-                  ? 'This history comes from a shallow clone. The commit count is the commits present in that clone, not the repository’s complete historical record.'
-                  : 'This history is marked incomplete. The commit count is only the commits available to this analysis.'}
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <p className="text-sm text-[var(--color-text-muted)]">
-            Depth: {summary.historyDepth}. Complete record: {summary.isComplete ? 'yes' : 'no'}.
-          </p>
-          {summary.commitsWithoutFileDiff > 0 && (
-            <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-              {formatNumber(summary.commitsWithoutFileDiff)}{' '}
-              {summary.commitsWithoutFileDiff === 1 ? 'commit has' : 'commits have'} no file diff because a parent commit is outside this clone.
-            </p>
-          )}
-        </Card>
+    <div>
+      {shallow && (
+        <p className="text-sm text-[var(--color-text-muted)]">
+          This repository was analyzed from a shallow clone, so the available history is incomplete.
+        </p>
+      )}
+      {summary.historyDepth === 'limited' && (
+        <p className="text-sm text-[var(--color-text)]">
+          {formatNumber(summary.availableCommits)} / {formatNumber(summary.cloneCommitCount)} commits analyzed. History was truncated at the configured limit.
+        </p>
+      )}
+      {!shallow && summary.historyDepth !== 'limited' && !summary.isComplete && (
+        <p className="text-sm text-[var(--color-text)]">
+          This history is marked incomplete. The commit count is only the commits available to this analysis.
+        </p>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Available commits" value={formatNumber(summary.availableCommits)} icon={GitCommitHorizontal} />
-        <StatCard label="Authors" value={formatNumber(summary.uniqueAuthors)} icon={Users} />
-        <StatCard label="File changes" value={formatNumber(summary.totalFileChanges)} />
-        <StatCard label="Additions" value={formatNumber(summary.totalAdditions)} />
-        <StatCard label="Deletions" value={formatNumber(summary.totalDeletions)} />
-      </div>
-
-      <Card>
-        <CardHeader>
+      <section className="mt-4 border-t border-[var(--color-border)] pt-4">
+        <h2 className="text-sm font-semibold text-[var(--color-text)]">Available history</h2>
+        <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-3">
           <div>
-            <CardTitle>Available range</CardTitle>
-            <CardDescription>Oldest and newest commit timestamps in this result.</CardDescription>
+            <dt className="text-xs text-[var(--color-text-faint)]">Commits</dt>
+            <dd className="mt-0.5 font-mono text-sm text-[var(--color-text)]">{formatNumber(summary.availableCommits)}</dd>
           </div>
-        </CardHeader>
-        <div className="grid grid-cols-1 gap-2 text-sm text-[var(--color-text-muted)] sm:grid-cols-2">
-          <p>Oldest: {summary.oldestAvailableCommitAt ? formatDateTime(summary.oldestAvailableCommitAt) : 'None reported'}</p>
-          <p>Newest: {summary.newestAvailableCommitAt ? formatDateTime(summary.newestAvailableCommitAt) : 'None reported'}</p>
-        </div>
-      </Card>
+          <div>
+            <dt className="text-xs text-[var(--color-text-faint)]">Authors</dt>
+            <dd className="mt-0.5 font-mono text-sm text-[var(--color-text)]">{formatNumber(summary.uniqueAuthors)}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="mt-4 border-t border-[var(--color-border)] pt-4">
+        <h2 className="text-sm font-semibold text-[var(--color-text)]">File-change statistics</h2>
+        {(shallow || missingDiffs) && (
+          <p className="mt-1 max-w-2xl text-sm text-[var(--color-text-muted)]">
+            Historical file changes are incomplete because the parent commit is outside this clone.
+          </p>
+        )}
+        {(shallow || missingDiffs) && recordedChangesAreZero && (
+          <p className="mt-1 max-w-2xl text-sm text-[var(--color-text)]">
+            A zero here does not mean the repository had no changes.
+          </p>
+        )}
+        <dl className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="rounded-md border border-dashed border-[var(--color-border)] px-3 py-2">
+            <dt className="text-xs text-[var(--color-text-faint)]">File changes recorded</dt>
+            <dd className="mt-0.5 font-mono text-sm text-[var(--color-text-muted)]">{formatNumber(summary.totalFileChanges)}</dd>
+          </div>
+          <div className="rounded-md border border-dashed border-[var(--color-border)] px-3 py-2">
+            <dt className="text-xs text-[var(--color-text-faint)]">Additions recorded</dt>
+            <dd className="mt-0.5 font-mono text-sm text-[var(--color-text-muted)]">{formatNumber(summary.totalAdditions)}</dd>
+          </div>
+          <div className="rounded-md border border-dashed border-[var(--color-border)] px-3 py-2">
+            <dt className="text-xs text-[var(--color-text-faint)]">Deletions recorded</dt>
+            <dd className="mt-0.5 font-mono text-sm text-[var(--color-text-muted)]">{formatNumber(summary.totalDeletions)}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <details className="mt-4">
+        <summary className="cursor-pointer text-sm text-[var(--color-text-muted)]">Historical range</summary>
+        <p className="mt-2 text-sm text-[var(--color-text-muted)]">
+          Oldest: {summary.oldestAvailableCommitAt ? formatDateTime(summary.oldestAvailableCommitAt) : 'None reported'}
+        </p>
+        <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+          Newest: {summary.newestAvailableCommitAt ? formatDateTime(summary.newestAvailableCommitAt) : 'None reported'}
+        </p>
+        <p className="mt-1 text-xs text-[var(--color-text-faint)]">
+          Depth: {summary.historyDepth}. Complete record: {summary.isComplete ? 'yes' : 'no'}.
+        </p>
+      </details>
 
       {result.errors.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>History notes</CardTitle>
-              <CardDescription>Messages reported with this Git history result.</CardDescription>
-            </div>
-          </CardHeader>
-          <ul className="max-h-40 space-y-1 overflow-y-auto text-sm text-[var(--color-text-muted)]">
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm text-[var(--color-text-muted)]">
+            History notes ({formatNumber(result.errors.length)})
+          </summary>
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm text-[var(--color-text-muted)]">
             {result.errors.map((item) => (
               <li key={item.message}>{item.message}</li>
             ))}
           </ul>
-        </Card>
+        </details>
       )}
 
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>Commits</CardTitle>
-            <CardDescription>
-              {summary.availableCommits === 0
-                ? 'No commits were reported in the available history.'
-                : summary.availableCommits === 1
-                  ? '1 commit in the available history.'
-                  : `${formatNumber(summary.availableCommits)} commits in the available history.`}
-            </CardDescription>
-          </div>
-        </CardHeader>
+      <section className="mt-5 border-t border-[var(--color-border)] pt-4">
+        <h2 className="text-sm font-semibold text-[var(--color-text)]">Commits</h2>
+        <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+          {summary.availableCommits === 0
+            ? 'No commits were reported in the available history.'
+            : `${formatNumber(result.commits.length)} shown from the available history.`}
+        </p>
         {result.commits.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">No commits were reported.</p>
+          <p className="mt-3 text-sm text-[var(--color-text-muted)]">No commits were reported.</p>
         ) : (
-          <div className="max-h-80 divide-y divide-[var(--color-border)] overflow-y-auto">
+          <div className="mt-2 max-h-80 divide-y divide-[var(--color-border)] overflow-y-auto border-y border-[var(--color-border)]">
             {result.commits.map((commit) => (
               <div key={commit.hash} className="py-3">
                 <p className="text-sm text-[var(--color-text)]">{commit.subject || 'No subject reported'}</p>
-                <p className="mt-1 font-mono text-xs text-[var(--color-text-faint)]">{commit.hash}</p>
+                <p className="mt-1 break-all font-mono text-xs text-[var(--color-text-faint)]">{commit.hash}</p>
                 <p className="mt-1 text-xs text-[var(--color-text-muted)]">
                   {commit.author} · {formatDateTime(commit.timestamp)}
                 </p>
@@ -201,53 +226,65 @@ function HistoryEvidence({ result }: { result: GitHistoryResult }) {
             ))}
           </div>
         )}
-      </Card>
+      </section>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Authors in the available history</CardTitle>
-              <CardDescription>Commit counts are how many available commits name that author.</CardDescription>
-            </div>
-          </CardHeader>
-          {result.authors.length === 0 ? (
-            <p className="text-sm text-[var(--color-text-muted)]">No authors were reported.</p>
-          ) : (
-            <div className="max-h-72 overflow-y-auto">
-              {result.authors.map((author) => (
-                <div key={author.name} className="flex items-center justify-between gap-3 py-2 text-sm">
-                  <span className="truncate text-[var(--color-text)]">{author.name}</span>
-                  <span className="font-mono text-xs text-[var(--color-text-muted)]">{formatNumber(author.commits)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
+      <section className="mt-5 border-t border-[var(--color-border)] pt-4">
+        <h2 className="text-sm font-semibold text-[var(--color-text)]">Authors</h2>
+        <p className="mt-1 text-sm text-[var(--color-text-muted)]">Commit counts are how many available commits name that author.</p>
+        {result.authors.length === 0 ? (
+          <p className="mt-3 text-sm text-[var(--color-text-muted)]">No authors were reported.</p>
+        ) : (
+          <ul className="mt-2 max-h-72 divide-y divide-[var(--color-border)] overflow-y-auto border-y border-[var(--color-border)]">
+            {result.authors.map((author) => (
+              <li key={author.name} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="min-w-0 truncate text-[var(--color-text)]">{author.name}</span>
+                <span className="font-mono text-xs text-[var(--color-text-muted)]">{formatNumber(author.commits)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Most changed files by commit count</CardTitle>
-              <CardDescription>
-                Commit count is how many available commits touch the file. It is not a quality or risk score. The analyzer returns at most 20 files.
-              </CardDescription>
-            </div>
-          </CardHeader>
-          {result.mostChangedFiles.length === 0 ? (
-            <p className="text-sm text-[var(--color-text-muted)]">No file changes were recorded in the available history.</p>
-          ) : (
-            <div className="max-h-72 overflow-y-auto">
-              {result.mostChangedFiles.map((file) => (
-                <div key={file.path} className="flex items-center justify-between gap-3 py-2 text-sm">
-                  <span className="truncate font-mono text-xs text-[var(--color-text)]">{file.path}</span>
-                  <span className="font-mono text-xs text-[var(--color-text-muted)]">{formatNumber(file.commitCount)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
+      <section className="mt-5 border-t border-[var(--color-border)] pt-4">
+        <h2 className="text-sm font-semibold text-[var(--color-text)]">Most changed files</h2>
+        <p className="mt-1 max-w-2xl text-sm text-[var(--color-text-muted)]">
+          Commit count is how many available commits touch the file. It is not a quality or risk score. The analyzer returns at most 20 files.
+        </p>
+        {result.mostChangedFiles.length === 0 ? (
+          <p className="mt-3 text-sm text-[var(--color-text-muted)]">
+            {shallow || missingDiffs
+              ? 'No file changes were recorded in the available history. That does not mean the repository had no changes.'
+              : 'No file changes were recorded in the available history.'}
+          </p>
+        ) : (
+          <ul className="mt-2 max-h-72 divide-y divide-[var(--color-border)] overflow-y-auto border-y border-[var(--color-border)]">
+            {result.mostChangedFiles.map((file) => (
+              <li key={file.path} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="min-w-0 truncate font-mono text-xs text-[var(--color-text)]">{file.path}</span>
+                <span className="font-mono text-xs text-[var(--color-text-muted)]">{formatNumber(file.commitCount)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {result.files.length > 0 && (
+        <details className="mt-6">
+          <summary className="cursor-pointer text-sm text-[var(--color-text-muted)]">
+            File history details ({formatNumber(result.files.length)})
+          </summary>
+          <ul className="mt-2 max-h-80 divide-y divide-[var(--color-border)] overflow-y-auto border-y border-[var(--color-border)]">
+            {result.files.map((file) => (
+              <li key={file.path} className="py-2">
+                <p className="break-all font-mono text-xs text-[var(--color-text)]">{file.path}</p>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  {formatNumber(file.commitCount)} commits · {formatNumber(file.additions)} additions · {formatNumber(file.deletions)} deletions
+                </p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }

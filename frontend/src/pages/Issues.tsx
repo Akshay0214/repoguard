@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bug, ChevronRight, FolderGit2, Search, SlidersHorizontal } from 'lucide-react';
+import { FolderGit2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { useAnalysis } from '@/context/analysisState';
 import { findingRouteId } from '@/lib/findingId';
+import { formatNumber } from '@/lib/format';
 import { ApiError } from '@/services/apiClient';
 import { getAnalysisIssues, type IssueListResponse, type StaticFinding } from '@/services/repositoryService';
 
@@ -21,11 +20,14 @@ function isWaiting(error: ApiError): boolean {
   );
 }
 
-function locationLabel(finding: StaticFinding): string {
-  if (finding.line === null) return finding.path;
-  if (finding.column === null) return `${finding.path}:${finding.line}`;
-  return `${finding.path}:${finding.line}:${finding.column}`;
+function locationText(finding: StaticFinding): string | null {
+  if (finding.line === null) return null;
+  if (finding.column === null) return `Line ${finding.line}`;
+  return `Line ${finding.line} · Column ${finding.column}`;
 }
+
+const fieldClass =
+  'w-full rounded-md border bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]';
 
 export function Issues() {
   const { currentAnalysis } = useAnalysis();
@@ -88,22 +90,25 @@ export function Issues() {
     });
   }, [result, pathQuery, ruleQuery, severity]);
 
+  const filtersActive = pathQuery.trim().length > 0 || ruleQuery !== 'all' || severity !== 'all';
+
+  const clearFilters = () => {
+    setPathQuery('');
+    setRuleQuery('all');
+    setSeverity('all');
+  };
+
   if (!currentAnalysis) {
     return (
       <div>
         <PageHeader
-          title="Static findings"
-          description="No repository is selected. Findings are not available until a job is created."
+          title="Issues"
+          description="Static-analysis findings detected in the analyzed repository."
         />
         <EmptyState
           icon={<FolderGit2 size={20} />}
           title="No repository selected"
-          description="Start an analysis from the Analyze page. This view does not keep findings after a reload."
-          action={
-            <Link to="/analyze">
-              <Button size="sm">Analyze a repository</Button>
-            </Link>
-          }
+          description="Use Analyze repository in the header. This view does not keep findings after a reload."
         />
       </div>
     );
@@ -114,7 +119,7 @@ export function Issues() {
   if (error || !result) {
     return (
       <ErrorState
-        title="Static findings unavailable"
+        title="Findings could not be loaded"
         description={error ?? 'Static findings could not be loaded.'}
         onRetry={() => {
           setLoading(true);
@@ -125,108 +130,131 @@ export function Issues() {
     );
   }
 
+  const { findingCount, errorCount, warningCount } = result.summary;
+
   return (
     <div>
       <PageHeader
-        title="Static findings"
-        description={`${result.summary.findingCount} findings from the fixed ESLint rule set. Filtering only changes what is shown.`}
+        title="Issues"
+        description="Static-analysis findings detected in the analyzed repository."
       />
 
+      <p className="font-mono text-sm text-[var(--color-text)]">
+        {formatNumber(findingCount)} {findingCount === 1 ? 'finding' : 'findings'}
+        {' · '}
+        {formatNumber(errorCount)} {errorCount === 1 ? 'error' : 'errors'}
+        {' · '}
+        {formatNumber(warningCount)} {warningCount === 1 ? 'warning' : 'warnings'}
+      </p>
+
       {result.summary.truncated && (
-        <div className="mb-4 rounded-md border border-[var(--color-medium)]/40 bg-[var(--color-medium-soft)] px-4 py-3 text-sm text-[var(--color-text)]">
-          <p>These findings do not cover the whole repository. Static analysis was truncated.</p>
-          {result.limitations.length > 0 && (
-            <ul className="mt-2 space-y-1 text-[var(--color-text-muted)]">
-              {result.limitations.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <p className="mt-2 text-sm text-[var(--color-text-muted)]">
+          Static analysis was truncated, so this list does not cover the whole repository.
+          {result.limitations.length > 0 ? ` ${result.limitations.join(' ')}` : ''}
+        </p>
       )}
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-faint)]" />
-          <input
-            value={pathQuery}
-            onChange={(event) => setPathQuery(event.target.value)}
-            placeholder="Filter by file path…"
-            className="w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] py-2 pl-9 pr-3 text-sm text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)] focus:border-[var(--color-accent)]"
-          />
+      <div className="mt-4 border-t border-[var(--color-border)] pt-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="min-w-0 flex-1 text-xs text-[var(--color-text-faint)]">
+            Path
+            <input
+              value={pathQuery}
+              onChange={(event) => setPathQuery(event.target.value)}
+              placeholder="Filter by file path"
+              aria-label="Filter by file path"
+              className={`${fieldClass} mt-1 ${pathQuery.trim() ? 'border-[var(--color-accent)]' : 'border-[var(--color-border-strong)]'}`}
+            />
+          </label>
+          <label className="text-xs text-[var(--color-text-faint)] sm:w-36">
+            Severity
+            <select
+              value={severity}
+              onChange={(event) => setSeverity(event.target.value as 'all' | StaticFinding['severity'])}
+              aria-label="Filter by severity"
+              className={`${fieldClass} mt-1 ${severity !== 'all' ? 'border-[var(--color-accent)]' : 'border-[var(--color-border-strong)]'}`}
+            >
+              <option value="all">All severities</option>
+              <option value="error">error</option>
+              <option value="warning">warning</option>
+            </select>
+          </label>
+          <label className="min-w-0 text-xs text-[var(--color-text-faint)] sm:w-56">
+            Rule
+            <select
+              value={ruleQuery}
+              onChange={(event) => setRuleQuery(event.target.value)}
+              aria-label="Filter by rule"
+              className={`${fieldClass} mt-1 ${ruleQuery !== 'all' ? 'border-[var(--color-accent)]' : 'border-[var(--color-border-strong)]'}`}
+            >
+              <option value="all">All rules</option>
+              {ruleIds.map((ruleId) => (
+                <option key={ruleId} value={ruleId}>
+                  {ruleId}
+                </option>
+              ))}
+            </select>
+          </label>
+          {filtersActive && (
+            <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
         </div>
-        <select
-          value={severity}
-          onChange={(event) => setSeverity(event.target.value as 'all' | StaticFinding['severity'])}
-          className="rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]"
-        >
-          <option value="all">All severities</option>
-          <option value="error">error</option>
-          <option value="warning">warning</option>
-        </select>
-        <select
-          value={ruleQuery}
-          onChange={(event) => setRuleQuery(event.target.value)}
-          className="rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]"
-        >
-          <option value="all">All rules</option>
-          {ruleIds.map((ruleId) => (
-            <option key={ruleId} value={ruleId}>
-              {ruleId}
-            </option>
-          ))}
-        </select>
+        {filtersActive && result.findings.length > 0 && (
+          <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+            Showing {formatNumber(filtered.length)} of {formatNumber(result.findings.length)} returned findings.
+          </p>
+        )}
       </div>
 
       {result.findings.length === 0 ? (
-        <EmptyState
-          icon={<Bug size={18} />}
-          title="No static-analysis findings"
-          description="No static-analysis findings were reported by the current fixed rule set."
-        />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={<SlidersHorizontal size={18} />}
-          title="No findings match these filters"
-          description="The analysis result is unchanged. Clear a filter to see the returned findings."
-        />
-      ) : (
-        <Card padded={false} className="overflow-hidden">
-          <div className="hidden grid-cols-[1fr_180px_220px_90px] gap-4 border-b border-[var(--color-border)] px-4 py-2.5 text-xs font-medium text-[var(--color-text-faint)] md:grid">
-            <span>Message</span>
-            <span>Rule</span>
-            <span>File</span>
-            <span>Severity</span>
-          </div>
-          <div className="divide-y divide-[var(--color-border)]">
-            {filtered.map((finding) => (
-              <Link
-                key={findingRouteId(finding)}
-                to={`/issues/${findingRouteId(finding)}`}
-                className="grid grid-cols-1 gap-2 px-4 py-3.5 transition-colors hover:bg-[var(--color-surface-hover)] md:grid-cols-[1fr_180px_220px_90px] md:items-center md:gap-4"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="hidden shrink-0 text-[var(--color-text-faint)] md:block">
-                    <ChevronRight size={14} />
-                  </span>
-                  <span className="truncate text-sm text-[var(--color-text)]">{finding.message}</span>
-                </div>
-                <span className="truncate font-mono text-xs text-[var(--color-text-muted)]">{finding.ruleId}</span>
-                <span className="truncate font-mono text-xs text-[var(--color-text-faint)]">{locationLabel(finding)}</span>
-                <Badge color={finding.severity === 'error' ? 'var(--color-critical)' : 'var(--color-medium)'} className="w-fit">
-                  {finding.severity}
-                </Badge>
-              </Link>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {result.findings.length > 0 && filtered.length > 0 && (
-        <div className="mt-3 flex items-center gap-2 text-xs text-[var(--color-text-faint)]">
-          <Badge>{filtered.length} shown</Badge>
-          <span>of {result.findings.length} returned findings</span>
+        <div className="mt-4">
+          <EmptyState
+            title="No static-analysis findings were detected."
+            description="The analyzer returned no findings. That does not mean the repository has no bugs or no technical debt."
+          />
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="mt-4">
+          <EmptyState
+            title="No findings match these filters."
+            description="The returned findings are unchanged."
+            action={
+              <Button type="button" variant="secondary" size="sm" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <ul className="mt-3 divide-y divide-[var(--color-border)] border-y border-[var(--color-border)]">
+          {filtered.map((finding) => {
+            const place = locationText(finding);
+            return (
+              <li key={findingRouteId(finding)}>
+                <Link
+                  to={`/issues/${findingRouteId(finding)}`}
+                  className="block py-3 transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:bg-[var(--color-surface-hover)]"
+                >
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span
+                      className={`text-xs font-semibold uppercase tracking-wide ${
+                        finding.severity === 'error' ? 'text-[var(--color-critical)]' : 'text-[var(--color-warning)]'
+                      }`}
+                    >
+                      {finding.severity}
+                    </span>
+                    <span className="font-mono text-sm text-[var(--color-text)]">{finding.ruleId}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-[var(--color-text)]">{finding.message}</p>
+                  <p className="mt-1 break-all font-mono text-xs text-[var(--color-text-muted)]">{finding.path}</p>
+                  {place && <p className="mt-0.5 text-xs text-[var(--color-text-faint)]">{place}</p>}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

@@ -884,7 +884,7 @@ export async function getAnalysisDependencies(analysisId: string): Promise<Depen
   };
 }
 
-export type HistoryDepth = 'shallow' | 'complete';
+export type HistoryDepth = 'shallow' | 'limited' | 'complete';
 
 export interface GitHistorySummary {
   availableCommits: number;
@@ -897,6 +897,9 @@ export interface GitHistorySummary {
   historyDepth: HistoryDepth;
   isComplete: boolean;
   commitsWithoutFileDiff: number;
+  cloneCommitCount: number;
+  truncated: boolean;
+  commitLimit: number | null;
 }
 
 export interface GitCommitRecord {
@@ -1052,9 +1055,12 @@ export async function getAnalysisGitHistory(analysisId: string): Promise<GitHist
     readNonNegativeInteger(summary.totalDeletions) === null ||
     (summary.oldestAvailableCommitAt !== null && oldest === null) ||
     (summary.newestAvailableCommitAt !== null && newest === null) ||
-    (summary.historyDepth !== 'shallow' && summary.historyDepth !== 'complete') ||
+    (summary.historyDepth !== 'shallow' && summary.historyDepth !== 'limited' && summary.historyDepth !== 'complete') ||
     typeof summary.isComplete !== 'boolean' ||
     readNonNegativeInteger(summary.commitsWithoutFileDiff) === null ||
+    readNonNegativeInteger(summary.cloneCommitCount ?? summary.availableCommits) === null ||
+    (summary.truncated !== undefined && typeof summary.truncated !== 'boolean') ||
+    (summary.commitLimit !== undefined && summary.commitLimit !== null && readNonNegativeInteger(summary.commitLimit) === null) ||
     !commits ||
     commits.some((commit) => commit === null) ||
     !authors ||
@@ -1082,6 +1088,9 @@ export async function getAnalysisGitHistory(analysisId: string): Promise<GitHist
       historyDepth: summary.historyDepth,
       isComplete: summary.isComplete,
       commitsWithoutFileDiff: summary.commitsWithoutFileDiff,
+      cloneCommitCount: summary.cloneCommitCount ?? summary.availableCommits,
+      truncated: summary.truncated === true,
+      commitLimit: typeof summary.commitLimit === 'number' ? summary.commitLimit : null,
     },
     commits: commits as GitCommitRecord[],
     authors: authors as GitAuthorRecord[],

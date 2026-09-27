@@ -327,8 +327,10 @@ function staticLimitations(result: StaticAnalysisResult): string[] {
 
 function historyLimitations(result: GitHistoryResult): string[] {
   const limitations: string[] = [];
-  if (result.summary.historyDepth === 'shallow' || !result.summary.isComplete) {
+  if (result.summary.historyDepth === 'shallow') {
     limitations.push('Git history is shallow and incomplete.');
+  } else if (result.summary.historyDepth === 'limited') {
+    limitations.push('Git history was limited before every commit in the clone was recorded.');
   }
   if (result.summary.commitsWithoutFileDiff > 0) {
     const count = result.summary.commitsWithoutFileDiff;
@@ -392,6 +394,7 @@ export function readTechnicalDebt(
 ):
   | { state: 'pending' }
   | { state: 'failed'; message: string }
+  | { state: 'unavailable'; message: string }
   | { state: 'ready'; report: TechnicalDebtReport } {
   const readiness = readRepositoryAnalysisStatus(job);
   if (job.status === 'failed') {
@@ -401,8 +404,14 @@ export function readTechnicalDebt(
     return { state: 'pending' };
   }
   const run = runs.get(job.analysisId);
-  if (!run?.debt) return { state: 'pending' };
-  return { state: 'ready', report: run.debt };
+  if (run?.debt) return { state: 'ready', report: run.debt };
+  return { state: 'unavailable', message: debtUnavailableMessage(job, run) };
+}
+
+function debtUnavailableMessage(job: AnalysisJob, run: AnalysisRun | undefined): string {
+  const detail = [...limitationsFor(job, run), ...(run?.restoredLimitations ?? [])].find((item) => item.trim() !== '');
+  if (detail) return `Technical debt indicators were not produced for this analysis. ${detail}`;
+  return 'Technical debt indicators were not produced for this analysis.';
 }
 
 export function restoreCompletedAnalysis(

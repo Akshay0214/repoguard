@@ -216,6 +216,14 @@ async function withAskpass(
   }
 }
 
+/** Full branch history when depth is 0. A positive depth keeps the clone shallow on purpose. */
+export function gitCloneArgs(branch: string, cloneUrl: string, destination: string, depth = env.gitHistoryDepth): string[] {
+  const args = ['-c', 'core.longpaths=true', 'clone', '--single-branch', '--branch', branch];
+  if (depth > 0) args.push('--depth', String(depth));
+  args.push(cloneUrl, destination);
+  return args;
+}
+
 function runGitClone(
   cloneUrl: string,
   branch: string,
@@ -223,7 +231,7 @@ function runGitClone(
   credentialEnv: Record<string, string>,
   token: string | undefined,
 ): Promise<void> {
-  const args = ['-c', 'core.longpaths=true', 'clone', '--depth', '1', '--branch', branch, cloneUrl, destination];
+  const args = gitCloneArgs(branch, cloneUrl, destination);
 
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, {

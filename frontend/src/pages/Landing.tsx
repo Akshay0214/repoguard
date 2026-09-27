@@ -112,7 +112,7 @@ export function Landing() {
         <div className="mb-12 text-center">
           <h2 className="font-display text-2xl font-semibold text-[var(--color-text)]">What an analysis collects</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-[var(--color-text-muted)]">
-            Four evidence sources run together. They do not produce a health score or a technical-debt number.
+            Analyzer results are evidence. Heuristic indicators and AI text are labeled separately and are not validated quality scores.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -158,8 +158,7 @@ export function Landing() {
           Start from a GitHub repository.
         </h2>
         <p className="mx-auto mt-3 max-w-md text-sm text-[var(--color-text-muted)]">
-          The dashboard, issue list, and issue detail use the analysis you start. Dependency
-          visualization, history charts, and technical debt are not connected yet.
+          Dashboard, findings, dependencies, Git history, technical-debt indicators, and reports use the analysis you start. AI text is an interpretation of that evidence.
         </p>
         <div className="mt-7">
           <Link to="/analyze">

@@ -1,12 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
-import { FileCode2, Link2, Network, Package, Unlink } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
-import { StatCard } from '@/components/ui/StatCard';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
+import { Network } from 'lucide-react';
 import { DependencyGraph } from '@/components/dependencies/DependencyGraph';
 import { selectInternalVisualGraph, VISUAL_NODE_LIMIT } from '@/components/dependencies/graphLayout';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { useAnalysis } from '@/context/analysisState';
 import { formatNumber } from '@/lib/format';
 import { ApiError } from '@/services/apiClient';
@@ -23,15 +20,6 @@ function isPreparing(error: ApiError): boolean {
     error.status === 409 &&
     error.code === 'ACQUISITION_NOT_READY' &&
     error.message === 'Repository acquisition is not complete.'
-  );
-}
-
-function factRow(label: string, value: number) {
-  return (
-    <div className="flex items-center justify-between text-xs">
-      <span className="text-[var(--color-text-faint)]">{label}</span>
-      <span className="font-mono text-[var(--color-text)]">{formatNumber(value)}</span>
-    </div>
   );
 }
 
@@ -94,14 +82,11 @@ export function Dependencies() {
   if (!currentAnalysis) {
     return (
       <div>
-        <PageHeader
-          title="Dependency Graph"
-          description="Internal files, internal imports, external packages, and unresolved imports for the selected repository."
-        />
+        <PageIntro />
         <EmptyState
           icon={<Network size={20} />}
           title="No repository selected"
-          description="Start an analysis from the Analyze page. This view does not keep dependency evidence after a reload."
+          description="Use Analyze repository in the header. This view does not keep dependency evidence after a reload."
         />
       </div>
     );
@@ -109,16 +94,12 @@ export function Dependencies() {
 
   return (
     <div>
-      <PageHeader
-        title="Dependency Graph"
-        description={`Dependency evidence for ${currentAnalysis.repositoryName}. Counts come from the dependency analysis.`}
-      />
-
+      <PageIntro />
       {loading || preparing ? (
-        <LoadingState label={preparing ? 'Preparing repository…' : 'Collecting dependency evidence…'} />
+        <LoadingState label={preparing ? 'Repository acquisition is not complete.' : 'Loading dependency evidence…'} />
       ) : error ? (
         <ErrorState
-          title="Dependency evidence is unavailable"
+          title="Dependencies could not be loaded"
           description={error}
           onRetry={() => {
             setLoading(true);
@@ -132,11 +113,25 @@ export function Dependencies() {
           visualNodes={visual.nodes}
           visualEdges={visual.edges}
           bounded={visual.bounded}
-          selectedPath={selectedPath}
           selectedFacts={selectedFacts}
           onSelect={setSelectedPath}
         />
       ) : null}
+    </div>
+  );
+}
+
+function countLabel(count: number, singular: string, plural: string): string {
+  return `${formatNumber(count)} ${count === 1 ? singular : plural}`;
+}
+
+function PageIntro() {
+  return (
+    <div>
+      <h1 className="font-display text-xl font-semibold text-[var(--color-text)]">Dependencies</h1>
+      <p className="mt-1.5 max-w-2xl text-sm text-[var(--color-text-muted)]">
+        Repository dependency structure derived from imports and module resolution.
+      </p>
     </div>
   );
 }
@@ -146,7 +141,6 @@ function DependencyEvidence({
   visualNodes,
   visualEdges,
   bounded,
-  selectedPath,
   selectedFacts,
   onSelect,
 }: {
@@ -154,155 +148,144 @@ function DependencyEvidence({
   visualNodes: DependencyAnalysisResult['nodes'];
   visualEdges: DependencyAnalysisResult['edges'];
   bounded: boolean;
-  selectedPath: string | null;
   selectedFacts: FileDependencyFacts | null;
   onSelect: (path: string) => void;
 }) {
   const { summary } = result;
+  const internalEdges = result.edges.filter((edge) => edge.type === 'internal');
+  const notes = [
+    ...(summary.truncated
+      ? ['Dependency discovery stopped at a limit. These counts and lists are the returned result, not every dependency in the repository.']
+      : []),
+    ...(summary.parseErrors > 0
+      ? [`${formatNumber(summary.parseErrors)} source files could not be parsed for dependencies.`]
+      : []),
+    ...result.errors.map((item) => `${item.path}: ${item.message}`),
+  ];
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Internal files" value={formatNumber(summary.totalInternalNodes)} icon={FileCode2} />
-        <StatCard label="Internal dependencies" value={formatNumber(summary.totalInternalEdges)} icon={Link2} />
-        <StatCard label="External packages" value={formatNumber(summary.totalExternalPackages)} icon={Package} />
-        <StatCard label="Unresolved imports" value={formatNumber(summary.unresolvedImports)} icon={Unlink} />
-      </div>
+    <div>
+      <p className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--color-text)]">
+        <span>{countLabel(summary.totalInternalNodes, 'internal file', 'internal files')}</span>
+        <span>{countLabel(summary.totalInternalEdges, 'internal edge', 'internal edges')}</span>
+        <span>{countLabel(summary.totalExternalPackages, 'external package', 'external packages')}</span>
+        <span>{countLabel(summary.unresolvedImports, 'unresolved reference', 'unresolved references')}</span>
+      </p>
 
-      {(summary.truncated || summary.parseErrors > 0 || result.errors.length > 0) && (
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Limitations</CardTitle>
-              <CardDescription>Messages reported by dependency analysis.</CardDescription>
-            </div>
-          </CardHeader>
-          <ul className="max-h-40 space-y-1 overflow-y-auto text-sm text-[var(--color-text-muted)]">
-            {summary.parseErrors > 0 && (
-              <li>{formatNumber(summary.parseErrors)} source files could not be parsed for dependencies.</li>
-            )}
-            {result.errors.map((item) => (
-              <li key={`${item.path}\0${item.message}`}>
-                <span className="font-mono text-xs text-[var(--color-text)]">{item.path}</span>
-                <span> — {item.message}</span>
-              </li>
+      <section className="mt-6 border-t border-[var(--color-border)] pt-5">
+        <h2 className="text-base font-semibold text-[var(--color-text)]">Dependency graph</h2>
+        <p className="mt-1 max-w-2xl text-sm text-[var(--color-text-muted)]">
+          {bounded
+            ? `Showing ${formatNumber(visualNodes.length)} of ${formatNumber(summary.totalInternalNodes)} internal files and ${formatNumber(visualEdges.length)} of ${formatNumber(summary.totalInternalEdges)} internal edges. The picture is limited to ${VISUAL_NODE_LIMIT} files and is not the complete dependency graph.`
+            : `Showing all ${formatNumber(visualNodes.length)} returned internal files and ${formatNumber(visualEdges.length)} internal edges.`}
+          {' '}External packages are listed below and are not drawn as files.
+        </p>
+        {visualNodes.length > 0 ? (
+          <div className="mt-4 overflow-hidden rounded-md border border-[var(--color-border)]">
+            <ReactFlowProvider>
+              <DependencyGraph
+                nodes={visualNodes}
+                edges={visualEdges}
+                selectedId={selectedFacts?.path ?? null}
+                onSelect={onSelect}
+              />
+            </ReactFlowProvider>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-[var(--color-text-muted)]">No internal files were returned.</p>
+        )}
+        {selectedFacts && (
+          <div className="mt-3">
+            <p className="break-all font-mono text-xs text-[var(--color-text)]">{selectedFacts.path}</p>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+              {formatNumber(selectedFacts.outgoingInternal)} outgoing internal · {formatNumber(selectedFacts.incomingInternal)} incoming internal · {formatNumber(selectedFacts.external)} external packages · {formatNumber(selectedFacts.unresolved)} unresolved
+            </p>
+          </div>
+        )}
+      </section>
+
+      {notes.length > 0 && (
+        <section className="mt-6 border-t border-[var(--color-border)] pt-5">
+          <h2 className="text-base font-semibold text-[var(--color-text)]">Analysis limitations</h2>
+          <ul className="mt-3 space-y-2">
+            {notes.map((item) => (
+              <li key={item} className="break-words text-sm text-[var(--color-text-muted)]">{item}</li>
             ))}
           </ul>
-        </Card>
+        </section>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
-        <div>
-          <Card padded={false} className="overflow-hidden">
-            <div className="border-b border-[var(--color-border)] px-5 py-4">
-              <CardTitle>Internal files</CardTitle>
-              <CardDescription>
-                {bounded
-                  ? `Showing ${formatNumber(visualNodes.length)} of ${formatNumber(summary.totalInternalNodes)} internal nodes and ${formatNumber(visualEdges.length)} of ${formatNumber(summary.totalInternalEdges)} internal edges. This is a visualization subset in analyzer order, limited to ${VISUAL_NODE_LIMIT} nodes. It is not the complete dependency graph.`
-                  : `Showing all ${formatNumber(visualNodes.length)} internal nodes and ${formatNumber(visualEdges.length)} internal edges.`}
-                {' '}External packages are listed separately and are not drawn as files.
-              </CardDescription>
-            </div>
-            {visualNodes.length > 0 ? (
-              <ReactFlowProvider>
-                <DependencyGraph
-                  nodes={visualNodes}
-                  edges={visualEdges}
-                  selectedId={selectedPath}
-                  onSelect={onSelect}
-                />
-              </ReactFlowProvider>
-            ) : (
-              <p className="px-5 py-10 text-sm text-[var(--color-text-muted)]">
-                No internal files were reported.
+      <DetailSection title="Internal dependencies" count={internalEdges.length} empty="No internal dependency edges were returned.">
+        <ul className="max-h-80 space-y-2 overflow-y-auto">
+          {internalEdges.map((edge) => (
+            <li key={`${edge.source}\0${edge.target}\0${edge.kind}\0${edge.importSpecifier}`} className="text-sm">
+              <p className="break-all font-mono text-xs text-[var(--color-text)]">
+                {edge.source} → {edge.target}
               </p>
-            )}
-          </Card>
-        </div>
+              <p className="break-all text-xs text-[var(--color-text-muted)]">
+                {edge.kind} · {edge.importSpecifier}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </DetailSection>
 
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Selected file</CardTitle>
-              <CardDescription>Counts for the file you select in the graph.</CardDescription>
-            </div>
-          </CardHeader>
-          {selectedFacts ? (
-            <div className="space-y-3">
-              <p className="break-all font-mono text-xs text-[var(--color-text)]">{selectedFacts.path}</p>
-              <div className="space-y-2 border-t border-[var(--color-border)] pt-3">
-                {factRow('Outgoing internal files', selectedFacts.outgoingInternal)}
-                {factRow('Incoming internal files', selectedFacts.incomingInternal)}
-                {factRow('External packages', selectedFacts.external)}
-                {factRow('Unresolved imports', selectedFacts.unresolved)}
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-[var(--color-text-muted)]">Select an internal file to see its dependency counts.</p>
-          )}
-        </Card>
-      </div>
+      <DetailSection title="External packages" count={result.externalDependencies.length} empty="No external packages were returned.">
+        <p className="mb-3 text-xs text-[var(--color-text-muted)]">
+          Count is how many times the analyzer recorded the package.
+        </p>
+        <ul className="max-h-80 space-y-2 overflow-y-auto">
+          {result.externalDependencies.map((item) => (
+            <li key={item.name} className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+              <span className="break-all font-mono text-xs text-[var(--color-text)]">{item.name}</span>
+              <span className="text-xs text-[var(--color-text-muted)]">{formatNumber(item.count)}</span>
+            </li>
+          ))}
+        </ul>
+      </DetailSection>
 
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>External packages</CardTitle>
-            <CardDescription>
-              {formatNumber(summary.totalExternalPackages)} packages. Count is how many times the analyzer recorded the package. This is not a vulnerability list.
-            </CardDescription>
-          </div>
-        </CardHeader>
-        {result.externalDependencies.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">No external packages were reported.</p>
-        ) : (
-          <div className="max-h-72 overflow-y-auto">
-            <div className="grid grid-cols-[1fr_auto] gap-x-4 border-b border-[var(--color-border)] px-1 py-2 text-xs font-medium text-[var(--color-text-faint)]">
-              <span>Package</span>
-              <span>Count</span>
-            </div>
-            {result.externalDependencies.map((item) => (
-              <div key={item.name} className="grid grid-cols-[1fr_auto] gap-x-4 px-1 py-2 text-sm">
-                <span className="truncate font-mono text-xs text-[var(--color-text)]">{item.name}</span>
-                <span className="font-mono text-xs text-[var(--color-text-muted)]">{formatNumber(item.count)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>Unresolved imports</CardTitle>
-            <CardDescription>
-              {formatNumber(summary.unresolvedImports)} imports. The current analyzer did not establish a resolution for these specifiers.
-            </CardDescription>
-          </div>
-        </CardHeader>
-        {result.unresolved.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">No unresolved imports were reported.</p>
-        ) : (
-          <div className="max-h-96 overflow-auto">
-            <div className="grid min-w-[720px] grid-cols-[1.2fr_1fr_0.7fr_1.4fr] gap-3 border-b border-[var(--color-border)] px-1 py-2 text-xs font-medium text-[var(--color-text-faint)]">
-              <span>Source file</span>
-              <span>Import specifier</span>
-              <span>Kind</span>
-              <span>Message</span>
-            </div>
-            {result.unresolved.map((item) => (
-              <div
-                key={`${item.source}\0${item.kind}\0${item.importSpecifier}`}
-                className="grid min-w-[720px] grid-cols-[1.2fr_1fr_0.7fr_1.4fr] gap-3 px-1 py-2 text-xs"
-              >
-                <span className="break-all font-mono text-[var(--color-text)]">{item.source}</span>
-                <span className="break-all font-mono text-[var(--color-text-muted)]">{item.importSpecifier}</span>
-                <span className="text-[var(--color-text-muted)]">{item.kind}</span>
-                <span className="text-[var(--color-text-muted)]">{item.message}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
+      <DetailSection title="Unresolved references" count={result.unresolved.length} empty="No unresolved references were returned.">
+        <p className="mb-3 text-sm text-[var(--color-text-muted)]">
+          Unresolved means RepoGuard could not resolve the reference with its current resolver.
+        </p>
+        <ul className="max-h-96 space-y-3 overflow-y-auto">
+          {result.unresolved.map((item) => (
+            <li key={`${item.source}\0${item.kind}\0${item.importSpecifier}`}>
+              <p className="break-all font-mono text-xs text-[var(--color-text)]">{item.source}</p>
+              <p className="mt-1 break-all text-xs text-[var(--color-text-muted)]">
+                {item.kind} · {item.importSpecifier}
+              </p>
+              <p className="mt-1 break-words text-sm text-[var(--color-text-muted)]">{item.message}</p>
+            </li>
+          ))}
+        </ul>
+      </DetailSection>
     </div>
+  );
+}
+
+function DetailSection({
+  title,
+  count,
+  empty,
+  children,
+}: {
+  title: string;
+  count: number;
+  empty: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mt-6 border-t border-[var(--color-border)] pt-5">
+      <details>
+        <summary className="cursor-pointer text-base font-semibold text-[var(--color-text)]">
+          {title}
+          <span className="ml-2 text-sm font-normal text-[var(--color-text-muted)]">{formatNumber(count)}</span>
+        </summary>
+        <div className="mt-3">
+          {count === 0 ? <p className="text-sm text-[var(--color-text-muted)]">{empty}</p> : children}
+        </div>
+      </details>
+    </section>
   );
 }

@@ -1,23 +1,32 @@
-export type HistoryDepth = 'shallow' | 'complete';
+export type HistoryDepth = 'shallow' | 'limited' | 'complete';
 
 export interface GitHistorySummary {
-  /** Commits present in this clone, not the upstream repository's full history. */
+  /** Commits recorded by this analysis. This matches `commits.length`. */
   availableCommits: number;
   uniqueAuthors: number;
-  /** File appearances across available commits whose diffs could be read. */
+  /** File appearances across commits whose diffs could be read. */
   totalFileChanges: number;
   totalAdditions: number;
   totalDeletions: number;
   oldestAvailableCommitAt: string | null;
   newestAvailableCommitAt: string | null;
   historyDepth: HistoryDepth;
-  /** False when the clone is shallow or contains no commits. */
+  /**
+   * True only when the clone is not shallow, the configured commit and file caps
+   * were not hit, and at least one commit was recorded.
+   */
   isComplete: boolean;
   /**
    * Commits whose parent is outside this clone.
    * Their file diffs are omitted so a shallow boundary is not reported as a full-tree rewrite.
    */
   commitsWithoutFileDiff: number;
+  /** Commits present in this clone, including commits past the analysis cap. */
+  cloneCommitCount: number;
+  /** True when RepoGuard stopped before recording every commit or file in the clone. */
+  truncated: boolean;
+  /** Configured maximum commits recorded, when that cap was applied. */
+  commitLimit: number | null;
 }
 
 export interface GitCommitRecord {

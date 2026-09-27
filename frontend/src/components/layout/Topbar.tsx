@@ -1,43 +1,49 @@
-import { Menu, GitBranch, ScanSearch } from 'lucide-react';
+import { Menu, ScanSearch } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useAnalysis } from '@/context/analysisState';
+import { useRepositoryStatus } from '@/components/layout/useRepositoryStatus';
 
 export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   const { currentAnalysis } = useAnalysis();
+  const { productStatus, readiness } = useRepositoryStatus();
+  const source =
+    currentAnalysis?.sourceType === 'zip' ? 'ZIP upload' : currentAnalysis ? 'GitHub' : null;
+  const limitationCount = readiness?.limitations.length ?? 0;
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg-raised)]/80 px-4 backdrop-blur md:px-6">
-      <div className="flex items-center gap-3">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg-raised)] px-3 md:px-5">
+      <div className="flex min-w-0 items-center gap-3">
         <button
           onClick={onMenuClick}
-          className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)] md:hidden"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)] md:hidden"
           aria-label="Open navigation"
         >
           <Menu size={18} />
         </button>
-        <div className="flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5">
-          <GitBranch size={13} className="text-[var(--color-text-faint)]" />
-          {currentAnalysis ? (
-            <>
-              <span className="font-mono text-xs text-[var(--color-text)]">{currentAnalysis.repositoryName}</span>
-              <span className="rounded border border-[var(--color-border-strong)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-faint)]">
-                {currentAnalysis.branch}
-              </span>
-            </>
-          ) : (
-            <span className="font-mono text-xs text-[var(--color-text-faint)]">No repository selected</span>
-          )}
-        </div>
+        {currentAnalysis ? (
+          <div className="min-w-0">
+            <p className="truncate font-mono text-sm text-[var(--color-text)]">{currentAnalysis.repositoryName}</p>
+            <p className="truncate text-xs text-[var(--color-text-faint)]">
+              {source}
+              {currentAnalysis.branch ? ` · ${currentAnalysis.branch}` : ''}
+              {limitationCount > 0 ? ` · ${limitationCount} limitation${limitationCount === 1 ? '' : 's'}` : ''}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--color-text-faint)]">No repository selected</p>
+        )}
       </div>
-
-      <Link to="/analyze">
-        <Button size="sm" className="gap-1.5">
-          <ScanSearch size={14} />
-          <span className="hidden sm:inline">Analyze Repository</span>
-          <span className="sm:hidden">Analyze</span>
-        </Button>
-      </Link>
+      <div className="flex shrink-0 items-center gap-2">
+        <StatusBadge status={productStatus} />
+        <Link to="/analyze">
+          <Button size="sm" className="gap-1.5">
+            <ScanSearch size={14} />
+            <span className="hidden sm:inline">Analyze repository</span>
+          </Button>
+        </Link>
+      </div>
     </header>
   );
 }

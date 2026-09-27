@@ -70,6 +70,21 @@ export const env = {
   get cloneTimeoutMs(): number {
     return readPositiveInt(process.env.CLONE_TIMEOUT_MS, 180_000);
   },
+  /**
+   * Commits to fetch for the requested branch.
+   * `0` or unset clones the full branch history. A positive integer passes `--depth`.
+   */
+  get gitHistoryDepth(): number {
+    const raw = process.env.GIT_HISTORY_DEPTH?.trim() ?? '';
+    if (raw === '' || raw === '0') return 0;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < 0) return 0;
+    return value;
+  },
+  /** Maximum commits the history analyzer records from the clone. */
+  get gitHistoryCommitLimit(): number {
+    return readPositiveInt(process.env.GIT_HISTORY_COMMIT_LIMIT, 2_000);
+  },
 };
 
 export function assertProductionConfig(): void {

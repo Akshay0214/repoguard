@@ -153,6 +153,9 @@ async function loadHistory(analysisId: string, workspacePath: string): Promise<G
           historyDepth: 'complete',
           isComplete: false,
           commitsWithoutFileDiff: 0,
+          cloneCommitCount: 0,
+          truncated: false,
+          commitLimit: null,
         },
         commits: [],
         authors: [],
@@ -680,8 +683,10 @@ function summaryLimitations(
   if (dependencies.summary.truncated) {
     limitations.push({ source: 'dependencies', message: 'Dependency file discovery stopped at the file limit.' });
   }
-  if (history.summary.historyDepth === 'shallow' || !history.summary.isComplete) {
+  if (history.summary.historyDepth === 'shallow') {
     limitations.push({ source: 'history', message: 'Git history is shallow and incomplete.' });
+  } else if (history.summary.historyDepth === 'limited') {
+    limitations.push({ source: 'history', message: 'Git history was limited before every commit in the clone was recorded.' });
   }
   if (history.summary.commitsWithoutFileDiff > 0) {
     const count = history.summary.commitsWithoutFileDiff;

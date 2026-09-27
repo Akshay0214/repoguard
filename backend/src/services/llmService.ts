@@ -21,7 +21,8 @@ import { env } from '../config/env.js';
  *
  * Evidence items are pointers into the supplied context. A pointer that does
  * not name a present field is rejected. The factual observation is rendered
- * from those pointers. Interpretation text is labeled and is not fact-checked.
+ * from those pointers. Interpretation may discuss implications of those
+ * pointers, and it is rejected when it asserts a different analyzer's facts.
  */
 
 const REQUEST_TIMEOUT_MS = 45_000;
@@ -106,8 +107,19 @@ const SYSTEM_INSTRUCTIONS = [
   'Use only the JSON context in the user message. Do not invent files, metrics, line numbers, or source code.',
   'Do not write the factual observation. RepoGuard renders that sentence from the evidence pointers you cite.',
   'Each observation has category, confidence, evidence, and interpretation.',
-  'interpretation is inference only. Do not use it to state files, counts, dependencies, history, or findings that are not established by the cited evidence.',
+  'RepoGuard renders the factual observation from the evidence pointers. interpretation is separate: it may explain implications, uncertainty, or why that cited fact may matter.',
+  'interpretation must not add a repository or file fact that those pointers do not establish.',
+  'A pointer supports only its own fact. static.findingsTruncated means the static finding list hit a cap. It does not establish Git history, dependency coverage, AST coverage, risk, or technical debt.',
+  'Do not mention Git, commits, authors, clones, blame, diffs, or history unless that observation cites history evidence.',
+  'Do not mention dependencies, imports, exports, or packages unless that observation cites dependency evidence or an import or export count.',
+  'Do not mention ESLint configuration or the rule set unless that observation cites repositoryConfigUsed or ruleSet.',
+  'A dependenciesTruncated pointer does not establish that the file has no dependency edges.',
+  'If the cited evidence is not enough to explain a cause, say the evidence is insufficient. Do not borrow an explanation from a different analyzer.',
+  'Limitations may mention missing or shallow Git history only when the supplied context already records that history is missing, shallow, or incomplete.',
+  'Valid interpretation of a static finding: constant conditions can make control flow harder to reason about.',
+  'Invalid interpretation of a static finding or findingsTruncated: this file has incomplete Git history.',
   'Each evidence item is an object with source, field, and index. index is null for a scalar and the list position for one item.',
+  'The response schema lists only the evidence pointers present for this request. Cite those pointers and no others.',
   'source is ast, static, dependencies, history, or repository. field must be one of the allowed field names.',
   'Cite only a field that is present in the supplied context. If dependencies, history, or repository are absent, do not cite them and do not claim that those values are zero, empty, or absent.',
   'For a file, source ast field path is file.path and field fileTruncated is file.truncated. File AST scalars are lineCount, functionCount, classCount, importCount, exportCount, maxNestingDepth, and functionsTruncated. A function uses field function and its index.',
@@ -133,49 +145,109 @@ const SYSTEM_INSTRUCTIONS = [
   'Write a short summary and at most 6 observations.',
 ].join(' ');
 
-const responseFormat = {
-  type: 'json_schema' as const,
-  json_schema: {
-    name: 'repoguard_interpretation',
-    description: 'Grounded interpretation of RepoGuard repository evidence.',
-    strict: true,
-    schema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['summary', 'observations', 'limitations'],
-      properties: {
-        summary: { type: 'string' },
-        observations: {
-          type: 'array',
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['category', 'interpretation', 'evidence', 'confidence'],
-            properties: {
-              category: { type: 'string' },
-              interpretation: { type: 'string' },
-              evidence: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  additionalProperties: false,
-                  required: ['source', 'field', 'index'],
-                  properties: {
-                    source: { type: 'string', enum: [...EVIDENCE_SOURCES] },
-                    field: { type: 'string', enum: [...EVIDENCE_FIELDS] },
-                    index: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }] },
+const FILE_FINDING_INSTRUCTIONS = [
+  'Interpret the static-analysis findings in the user message.',
+  'Cite a finding as source static, field finding, and its index. Cite a static issue as source static, field issue, and its index.',
+  'Do not write the factual observation. RepoGuard renders that sentence from the evidence pointers you cite.',
+  'summary and interpretation may explain why a cited finding can make the code harder to reason about.',
+  'Do not state facts about Git history, dependencies, imports, packages, AST metrics, repository health, or technical debt.',
+  'Do not discuss any analyzer other than the cited finding or issue.',
+  'Write a short summary and at most one observation per cited finding or issue.',
+  'Leave limitations empty unless the user message itself states a limitation.',
+].join(' ');
+
+export function interpretationRequest(context: RepositoryContext): {
+  instructions: string;
+  user: string;
+  pointers: EvidenceReference[];
+} {
+  const findingPointers = fileFindingPointers(context);
+  if (findingPointers) {
+    return {
+      instructions: FILE_FINDING_INSTRUCTIONS,
+      user: JSON.stringify(fileFindingPayload(context)),
+      pointers: findingPointers,
+    };
+  }
+  return {
+    instructions: SYSTEM_INSTRUCTIONS,
+    user: JSON.stringify(context),
+    pointers: listEvidencePointers(context),
+  };
+}
+
+function fileFindingPointers(context: RepositoryContext): EvidenceReference[] | null {
+  if (context.mode !== 'file') return null;
+  const pointers: EvidenceReference[] = [];
+  context.file.static.findings.forEach((_, index) => {
+    pointers.push({ source: 'static', field: 'finding', index });
+  });
+  context.file.static.issues.forEach((_, index) => {
+    pointers.push({ source: 'static', field: 'issue', index });
+  });
+  return pointers.length > 0 ? pointers : null;
+}
+
+function fileFindingPayload(context: RepositoryContext): unknown {
+  if (context.mode !== 'file') return context;
+  return {
+    path: context.file.path,
+    findings: context.file.static.findings.map((finding, index) => ({ index, ...finding })),
+    issues: context.file.static.issues.map((issue, index) => ({ index, ...issue })),
+  };
+}
+
+function responseFormatFor(pointers: EvidenceReference[]) {
+  return {
+    type: 'json_schema' as const,
+    json_schema: {
+      name: 'repoguard_interpretation',
+      description: 'Grounded interpretation of RepoGuard repository evidence.',
+      strict: true,
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['summary', 'observations', 'limitations'],
+        properties: {
+          summary: { type: 'string' },
+          observations: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['category', 'interpretation', 'evidence', 'confidence'],
+              properties: {
+                category: { type: 'string' },
+                interpretation: {
+                  type: 'string',
+                  description:
+                    'Implication of this observation’s evidence pointers only. Do not state Git history, dependency, AST, or configuration facts unless those pointers are in this evidence array.',
+                },
+                evidence: {
+                  type: 'array',
+                  items: {
+                    anyOf: pointers.map((pointer) => ({
+                      type: 'object',
+                      additionalProperties: false,
+                      required: ['source', 'field', 'index'],
+                      properties: {
+                        source: { type: 'string', enum: [pointer.source] },
+                        field: { type: 'string', enum: [pointer.field] },
+                        index: pointer.index === null ? { type: 'null' } : { type: 'integer', enum: [pointer.index] },
+                      },
+                    })),
                   },
                 },
+                confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
               },
-              confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
             },
           },
+          limitations: { type: 'array', items: { type: 'string' } },
         },
-        limitations: { type: 'array', items: { type: 'string' } },
       },
     },
-  },
-};
+  };
+}
 
 export class LlmError extends Error {
   readonly code: 'NOT_CONFIGURED' | 'TIMEOUT' | 'UNAVAILABLE' | 'RATE_LIMIT' | 'INVALID_RESPONSE';
@@ -235,24 +307,43 @@ export async function requestInterpretation(context: RepositoryContext, config: 
   });
 
   try {
-    const completion = await client.chat.completions.create({
-      model: configured.model,
-      temperature: 0.2,
-      max_completion_tokens: 900,
-      messages: [
-        { role: 'system', content: SYSTEM_INSTRUCTIONS },
-        { role: 'user', content: JSON.stringify(context) },
-      ],
-      response_format: responseFormat,
-    });
-    const message = completion.choices[0]?.message;
-    if (!message || message.refusal) {
-      throw new LlmError('INVALID_RESPONSE', 'The AI provider declined to produce a structured interpretation.');
+    const request = interpretationRequest(context);
+    const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+      { role: 'system', content: request.instructions },
+      { role: 'user', content: request.user },
+    ];
+    let rejection: LlmError | undefined;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (rejection) {
+        messages.push({
+          role: 'user',
+          content: `The previous interpretation was rejected: ${rejection.message} Return a new structured interpretation. Keep factual claims inside the cited evidence pointers.`,
+        });
+      }
+      const completion = await client.chat.completions.create({
+        model: configured.model,
+        temperature: 0.2,
+        max_completion_tokens: 900,
+        messages,
+        response_format: responseFormatFor(request.pointers),
+      });
+      const message = completion.choices[0]?.message;
+      if (!message || message.refusal) {
+        rejection = new LlmError('INVALID_RESPONSE', 'The AI provider declined to produce a structured interpretation.');
+        continue;
+      }
+      if (typeof message.content !== 'string' || message.content.trim() === '') {
+        rejection = new LlmError('INVALID_RESPONSE', 'The AI provider returned an empty interpretation.');
+        continue;
+      }
+      try {
+        return validateModelInterpretation(context, message.content);
+      } catch (error) {
+        if (!(error instanceof LlmError) || error.code !== 'INVALID_RESPONSE') throw error;
+        rejection = error;
+      }
     }
-    if (typeof message.content !== 'string' || message.content.trim() === '') {
-      throw new LlmError('INVALID_RESPONSE', 'The AI provider returned an empty interpretation.');
-    }
-    return validateModelInterpretation(context, message.content);
+    throw rejection ?? new LlmError('INVALID_RESPONSE', 'The AI provider returned an empty interpretation.');
   } catch (error) {
     if (error instanceof LlmError) throw error;
     throw toLlmError(error);
@@ -275,7 +366,9 @@ function parseInterpretation(content: string, context: RepositoryContext): AiInt
   }
   const summary = requireText(parsed.summary, MAX_SUMMARY);
   const observations = attachObservedFacts(context, parseObservations(parsed.observations));
+  assertNarrativeClaims(summary, observations);
   const limitations = parseLimitationStrings(parsed.limitations);
+  assertLimitationClaims(context, limitations);
   return { summary, observations, limitations };
 }
 
@@ -344,10 +437,10 @@ function assertEvidenceSupported(context: RepositoryContext, observations: Array
   }
 }
 
-function evidenceCatalog(context: RepositoryContext): Set<string> {
-  const keys = new Set<string>();
+function listEvidencePointers(context: RepositoryContext): EvidenceReference[] {
+  const pointers: EvidenceReference[] = [];
   const add = (source: EvidenceSource, field: string, index: number | null = null) => {
-    keys.add(index === null ? `${source}\0${field}` : `${source}\0${field}\0${index}`);
+    pointers.push({ source, field, index });
   };
   const addRange = (source: EvidenceSource, field: string, count: number) => {
     for (let index = 0; index < count; index += 1) add(source, field, index);
@@ -395,7 +488,7 @@ function evidenceCatalog(context: RepositoryContext): Set<string> {
     add('static', 'issueCountParse');
     add('static', 'issueCountLimit');
     addRange('static', 'rule', context.static.rules.length);
-    return keys;
+    return pointers;
   }
 
   add('ast', 'path');
@@ -413,7 +506,7 @@ function evidenceCatalog(context: RepositoryContext): Set<string> {
   addRange('static', 'finding', context.file.static.findings.length);
   addRange('static', 'issue', context.file.static.issues.length);
 
-  if (context.mode === 'experiment-file-baseline') return keys;
+  if (context.mode === 'experiment-file-baseline') return pointers;
 
   add('repository', 'name');
   add('repository', 'branch');
@@ -440,6 +533,14 @@ function evidenceCatalog(context: RepositoryContext): Set<string> {
     ] as const) {
       add('history', field);
     }
+  }
+  return pointers;
+}
+
+function evidenceCatalog(context: RepositoryContext): Set<string> {
+  const keys = new Set<string>();
+  for (const evidence of listEvidencePointers(context)) {
+    keys.add(evidence.index === null ? `${evidence.source}\0${evidence.field}` : `${evidence.source}\0${evidence.field}\0${evidence.index}`);
   }
   return keys;
 }
@@ -564,6 +665,68 @@ function renderFileFact(
 function textValue(value: string | number | boolean | null | undefined): string {
   if (value === null || value === undefined) return 'null';
   return String(value);
+}
+
+const GIT_HISTORY_CLAIM = /\bgit\b|\bcommits?\b|\bauthors?\b|\bhistory\b|\bshallow clone\b|\bfile[- ]level diff\b|\bblame\b/i;
+const DEPENDENCY_CLAIM = /\bdependenc(?:y|ies)\b|\bnode_modules\b|\bpackage\.json\b|\bunresolved imports?\b|\bimports?\b|\bexports?\b/i;
+const DEPENDENCY_ABSENCE = /\b(no|zero|none|without|not have|does not have|doesn't have|has no|are absent|is absent)\b/i;
+const CONFIGURATION_CLAIM = /\beslint\b|\brule ?set\b/i;
+
+function cites(evidence: EvidenceReference[], source: EvidenceSource, fields?: readonly string[]): boolean {
+  return evidence.some((item) => item.source === source && (fields === undefined || fields.includes(item.field)));
+}
+
+function structuralDependencyEvidence(evidence: EvidenceReference[]): boolean {
+  return evidence.some(
+    (item) =>
+      (item.source === 'dependencies' && item.field !== 'dependenciesTruncated') ||
+      item.field === 'importCount' ||
+      item.field === 'exportCount' ||
+      item.field === 'totalImports' ||
+      item.field === 'totalExports',
+  );
+}
+
+function assertClaimsAgainstEvidence(text: string, evidence: EvidenceReference[]): void {
+  if (GIT_HISTORY_CLAIM.test(text) && !cites(evidence, 'history')) {
+    throw unsupportedClaim('Git-history');
+  }
+  if (DEPENDENCY_CLAIM.test(text)) {
+    const allowed = DEPENDENCY_ABSENCE.test(text) ? structuralDependencyEvidence(evidence) : structuralDependencyEvidence(evidence) || cites(evidence, 'dependencies');
+    if (!allowed) throw unsupportedClaim('dependency');
+  }
+  if (CONFIGURATION_CLAIM.test(text) && !cites(evidence, 'static', ['repositoryConfigUsed', 'ruleSet'])) {
+    throw unsupportedClaim('configuration');
+  }
+}
+
+function assertNarrativeClaims(summary: string, observations: AiObservation[]): void {
+  const cited = observations.flatMap((observation) => observation.evidence);
+  assertClaimsAgainstEvidence(summary, cited);
+  for (const observation of observations) {
+    assertClaimsAgainstEvidence(observation.interpretation, observation.evidence);
+  }
+}
+
+function assertLimitationClaims(context: RepositoryContext, limitations: string[]): void {
+  const available = listEvidencePointers(context);
+  const text = limitations.join(' ');
+  if (GIT_HISTORY_CLAIM.test(text)) {
+    const incompleteClaim = /\b(incomplete|unavailable|missing|absent|shallow|not available|not supplied|no file)\b/i.test(text);
+    const allowed = incompleteClaim ? historyIsIncomplete(context) : cites(available, 'history');
+    if (!allowed) throw unsupportedClaim('Git-history');
+  }
+  if (!DEPENDENCY_CLAIM.test(text)) return;
+  const recorded =
+    cites(available, 'dependencies') ||
+    dependenciesAreUnresolved(context) ||
+    context.limitations.some((item) => item.source === 'dependencies');
+  const allowed = DEPENDENCY_ABSENCE.test(text) ? structuralDependencyEvidence(available) : recorded;
+  if (!allowed) throw unsupportedClaim('dependency');
+}
+
+function unsupportedClaim(label: string): LlmError {
+  return new LlmError('INVALID_RESPONSE', `The AI interpretation states a ${label} fact that the cited evidence does not establish.`);
 }
 
 function unsupportedReference(source: string, field: string, index: number | null): LlmError {

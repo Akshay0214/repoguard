@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "tsx --test test/acquisition.test.ts test/analyzers.test.ts test/context-ai.test.ts test/debt-health.test.ts test/api.test.ts"
+    "test": "tsx --test test/acquisition.test.ts test/analyzers.test.ts test/context-ai.test.ts test/debt-health.test.ts test/debt-readiness.test.ts test/api.test.ts"
   },
   "dependencies": {
     "@babel/parser": "^7.29.9",

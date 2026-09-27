@@ -10,10 +10,22 @@ import {
   analysisWorkspacePath,
   cloneGitRepository,
   describeCloneFailure,
+  gitCloneArgs,
   removeAnalysisWorkspace,
 } from '../src/services/repositoryAcquisitionService.js';
 
 const execFileAsync = promisify(execFile);
+
+test('clone arguments request full branch history unless a depth is configured', () => {
+  const full = gitCloneArgs('main', 'https://github.com/octocat/Spoon-Knife.git', 'dest', 0);
+  assert.equal(full.includes('--depth'), false);
+  assert.ok(full.includes('--single-branch'));
+  assert.equal(full.at(-4), '--branch');
+  assert.equal(full.at(-3), 'main');
+  assert.equal(full.at(-2), 'https://github.com/octocat/Spoon-Knife.git');
+  const shallow = gitCloneArgs('main', 'https://github.com/octocat/Spoon-Knife.git', 'dest', 1);
+  assert.equal(shallow[shallow.indexOf('--depth') + 1], '1');
+});
 
 test('rejects an invalid GitHub URL', () => {
   assert.equal(parseGithubRepositoryName('https://example.com/owner/repo'), null);
@@ -34,9 +46,16 @@ test('clones a valid local repository, rejects a bad branch, and cleans the work
   await execFileAsync('git', ['init', '-b', 'main'], { cwd: source });
   await execFileAsync('git', ['add', 'index.js'], { cwd: source });
   await execFileAsync('git', ['-c', 'user.email=test@example.com', '-c', 'user.name=RepoGuard Test', 'commit', '-m', 'add file'], { cwd: source });
+  await writeFile(path.join(source, 'index.js'), 'export const value = 2;\n');
+  await execFileAsync('git', ['add', 'index.js'], { cwd: source });
+  await execFileAsync('git', ['-c', 'user.email=second@example.com', '-c', 'user.name=Second Author', 'commit', '-m', 'edit file'], { cwd: source });
 
   const destination = path.join(cloneDest, 'repo');
   await cloneGitRepository(source, 'main', destination);
+  const shallow = (await execFileAsync('git', ['rev-parse', '--is-shallow-repository'], { cwd: destination })).stdout.trim();
+  const count = Number((await execFileAsync('git', ['rev-list', '--count', 'HEAD'], { cwd: destination })).stdout.trim());
+  assert.equal(shallow, 'false');
+  assert.equal(count, 2);
   await assert.rejects(() => cloneGitRepository(source, 'missing-branch', path.join(cloneDest, 'bad')), /branch/i);
   await assert.rejects(() => cloneGitRepository(path.join(source, 'missing'), 'main', path.join(cloneDest, 'failed')));
 

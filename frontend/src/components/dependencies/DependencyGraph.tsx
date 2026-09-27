@@ -19,11 +19,13 @@ export function DependencyGraph({
   edges: fileEdges,
   selectedId,
   onSelect,
+  className = '',
 }: {
   nodes: { id: string }[];
   edges: DependencyRelation[];
   selectedId: string | null;
   onSelect: (path: string) => void;
+  className?: string;
 }) {
   const positions = useMemo(
     () => computeLayeredLayout(fileNodes, fileEdges),
@@ -55,7 +57,7 @@ export function DependencyGraph({
   );
 
   return (
-    <div className="h-[560px] w-full overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-raised)]">
+    <div className={`h-[min(70vh,520px)] min-h-[280px] w-full overflow-hidden bg-[var(--color-bg)] sm:h-[520px] ${className}`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, FileCode2, FolderGit2, LoaderCircle } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { useAnalysis } from '@/context/analysisState';
 import { findingRouteId } from '@/lib/findingId';
@@ -12,7 +8,9 @@ import { ApiError } from '@/services/apiClient';
 import {
   getAnalysisIssues,
   getFileAiInterpretation,
+  type FileAiEvidenceReference,
   type FileAiInterpretation,
+  type FileAiObservation,
   type IssueListResponse,
   type StaticFinding,
 } from '@/services/repositoryService';
@@ -27,13 +25,49 @@ function isWaiting(error: ApiError): boolean {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <span className="text-xs text-[var(--color-text-muted)]">{label}</span>
-      <span className="break-all text-right font-mono text-sm text-[var(--color-text)]">{value}</span>
-    </div>
-  );
+function locationText(finding: StaticFinding): string | null {
+  if (finding.line === null && finding.column === null) return null;
+  if (finding.line === null) return `Column ${finding.column}`;
+  if (finding.column === null) return `Line ${finding.line}`;
+  return `Line ${finding.line} · Column ${finding.column}`;
+}
+
+function findingFact(finding: StaticFinding): string {
+  const line = finding.line === null ? 'an unknown line' : `line ${finding.line}`;
+  const column = finding.column === null ? 'an unknown column' : `column ${finding.column}`;
+  return `${finding.path} has a ${finding.ruleId} finding at ${line}, ${column}: ${finding.message}`;
+}
+
+function evidencePointer(item: FileAiEvidenceReference): string {
+  return `${item.source}.${item.field}${item.index === null ? '' : `[${item.index}]`}`;
+}
+
+function sameText(left: string, right: string): boolean {
+  return left.replace(/\s+/g, ' ').trim() === right.replace(/\s+/g, ' ').trim();
+}
+
+function uniqueLimitations(items: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const item of items) {
+    const text = item.trim();
+    const key = text.toLowerCase();
+    if (text === '' || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(text);
+  }
+  return unique;
+}
+
+function aiStatusMessage(caught: unknown): string {
+  if (!(caught instanceof ApiError)) return 'AI interpretation is temporarily unavailable.';
+  if (caught.code === 'AI_NOT_CONFIGURED') {
+    return 'AI interpretation is unavailable because the AI service is not configured.';
+  }
+  if (caught.code === 'AI_TIMEOUT') return 'AI interpretation timed out.';
+  if (caught.code === 'AI_RESPONSE_INVALID') return 'AI interpretation could not be validated.';
+  const message = caught.message.trim();
+  return message === '' ? 'AI interpretation is temporarily unavailable.' : message;
 }
 
 export function IssueDetail() {
@@ -82,16 +116,11 @@ export function IssueDetail() {
   if (!currentAnalysis) {
     return (
       <div>
-        <PageHeader title="Finding" description="No repository is selected." />
+        <IssueTitle />
         <EmptyState
           icon={<FolderGit2 size={20} />}
           title="No repository selected"
-          description="Findings are only available for the analysis started in this session."
-          action={
-            <Link to="/analyze">
-              <Button size="sm">Analyze a repository</Button>
-            </Link>
-          }
+          description="Use Analyze repository in the header. This view does not keep findings after a reload."
         />
       </div>
     );
@@ -116,16 +145,15 @@ export function IssueDetail() {
   const finding = result.findings.find((item) => findingRouteId(item) === id) ?? null;
   if (!finding) {
     return (
-      <EmptyState
-        icon={<FileCode2 size={18} />}
-        title="Finding not found"
-        description="This finding is not in the current static-analysis result."
-        action={
-          <Link to="/issues" className="text-sm text-[var(--color-accent-text)] hover:underline">
-            Back to findings
-          </Link>
-        }
-      />
+      <div>
+        <IssueTitle />
+        <BackToIssues />
+        <EmptyState
+          icon={<FileCode2 size={18} />}
+          title="Finding not found"
+          description="This finding is not in the current static-analysis result."
+        />
+      </div>
     );
   }
 
@@ -139,17 +167,20 @@ export function IssueDetail() {
   );
 }
 
-function aiStatusMessage(caught: unknown): string {
-  if (!(caught instanceof ApiError)) return 'AI interpretation is temporarily unavailable.';
-  if (caught.code === 'AI_NOT_CONFIGURED') return 'AI interpretation is not configured.';
-  if (caught.code === 'AI_SERVICE_UNAVAILABLE') return 'AI interpretation is temporarily unavailable.';
-  if (caught.code === 'AI_RATE_LIMIT') return 'AI interpretation is temporarily rate-limited.';
-  if (caught.code === 'AI_TIMEOUT') return 'AI interpretation timed out.';
-  if (caught.code === 'AI_RESPONSE_INVALID') return 'AI interpretation returned an invalid response.';
-  if (caught.code === 'ACQUISITION_NOT_READY' || caught.status === 409) return 'Repository analysis is not ready.';
-  if (caught.code === 'FILE_NOT_FOUND') return 'This file was not found in the analyzed repository.';
-  if (caught.code === 'ANALYSIS_NOT_FOUND' || caught.status === 404) return 'This analysis is no longer available.';
-  return 'AI interpretation is temporarily unavailable.';
+function IssueTitle() {
+  return <h1 className="font-display text-xl font-semibold text-[var(--color-text)]">Issue Detail</h1>;
+}
+
+function BackToIssues() {
+  return (
+    <Link
+      to="/issues"
+      className="mt-3 inline-flex items-center gap-1.5 rounded-sm text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
+    >
+      <ArrowLeft size={14} aria-hidden />
+      Back to Issues
+    </Link>
+  );
 }
 
 function FindingDetail({
@@ -163,142 +194,187 @@ function FindingDetail({
   limitations: string[];
   truncated: boolean;
 }) {
-  return (
-    <div className="mx-auto max-w-4xl">
-      <Link to="/issues" className="mb-4 inline-flex items-center gap-1.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
-        <ArrowLeft size={13} />
-        Back to findings
-      </Link>
-
-      <PageHeader
-        title={finding.message}
-        description={finding.ruleId}
-        actions={
-          <Badge color={finding.severity === 'error' ? 'var(--color-critical)' : 'var(--color-medium)'} className="text-sm">
-            {finding.severity}
-          </Badge>
-        }
-      />
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Finding</CardTitle>
-          </CardHeader>
-          <div className="space-y-3">
-            <DetailRow label="File" value={finding.path} />
-            <DetailRow label="Line" value={finding.line === null ? 'Unavailable' : String(finding.line)} />
-            <DetailRow label="Column" value={finding.column === null ? 'Unavailable' : String(finding.column)} />
-            <DetailRow label="Rule" value={finding.ruleId} />
-            <DetailRow label="Severity" value={finding.severity} />
-            <DetailRow label="Message" value={finding.message} />
-            <DetailRow label="Tool" value={finding.tool} />
-            <DetailRow label="Category" value={finding.category ?? 'Unavailable'} />
-          </div>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Limitations</CardTitle>
-          </CardHeader>
-          {truncated && (
-            <p className="mb-3 text-sm text-[var(--color-text)]">
-              Static analysis was truncated. This finding is from the stored result, which does not cover the whole repository.
-            </p>
-          )}
-          {limitations.length === 0 ? (
-            <p className="text-sm text-[var(--color-text-muted)]">No static-analysis limitations were reported.</p>
-          ) : (
-            <ul className="space-y-2 text-sm text-[var(--color-text-muted)]">
-              {limitations.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-
-      <FindingAi key={`${analysisId}:${finding.path}`} analysisId={analysisId} path={finding.path} />
-    </div>
-  );
-}
-
-function FindingAi({ analysisId, path }: { analysisId: string; path: string }) {
   const [interpretation, setInterpretation] = useState<FileAiInterpretation | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const fact = findingFact(finding);
+  const where = locationText(finding);
 
   useEffect(() => {
     let cancelled = false;
-    void getFileAiInterpretation(analysisId, path)
+    void getFileAiInterpretation(analysisId, finding.path)
       .then((next) => {
         if (cancelled) return;
         setInterpretation(next);
       })
       .catch((caught: unknown) => {
         if (cancelled) return;
-        setError(aiStatusMessage(caught));
+        setAiError(aiStatusMessage(caught));
       });
     return () => {
       cancelled = true;
     };
-  }, [analysisId, path]);
+  }, [analysisId, finding.path]);
+
+  const matched = interpretation?.observations.filter((item) => sameText(item.observation, fact)) ?? [];
+  const otherEvidence = interpretation?.observations.filter((item) => !sameText(item.observation, fact)) ?? [];
+  const shownLimitations = uniqueLimitations([
+    ...limitations,
+    ...(truncated
+      ? ['Static analysis was truncated, so this result does not cover the whole repository.']
+      : []),
+    ...(interpretation?.limitations ?? []),
+  ]);
+
+  const copyPath = () => {
+    const reset = () => window.setTimeout(() => setCopyState('idle'), 1500);
+    void navigator.clipboard.writeText(finding.path).then(
+      () => {
+        setCopyState('copied');
+        reset();
+      },
+      () => {
+        setCopyState('failed');
+        reset();
+      },
+    );
+  };
 
   return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle>AI interpretation</CardTitle>
-      </CardHeader>
+    <div className="mx-auto max-w-3xl">
+      <IssueTitle />
+      <BackToIssues />
+
+      <div className="mt-6">
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span
+            className={`text-sm font-medium ${finding.severity === 'error' ? 'text-[var(--color-critical)]' : 'text-[var(--color-warning)]'}`}
+          >
+            {finding.severity}
+          </span>
+          <span className="break-all font-mono text-sm text-[var(--color-text)]">{finding.ruleId}</span>
+        </p>
+        <p className="mt-2 text-base leading-relaxed text-[var(--color-text)]">{finding.message}</p>
+      </div>
+
+      <div className="mt-5">
+        <p className="break-all font-mono text-sm text-[var(--color-text)]">{finding.path}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {where && <p className="text-sm text-[var(--color-text-muted)]">{where}</p>}
+          <button
+            type="button"
+            onClick={copyPath}
+            className="rounded-sm text-xs text-[var(--color-accent-text)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
+          >
+            {copyState === 'copied' ? 'Path copied' : copyState === 'failed' ? 'Could not copy path' : 'Copy path'}
+          </button>
+        </div>
+      </div>
+
+      <section className="mt-8 border-t border-[var(--color-border)] pt-5">
+        <h2 className="text-base font-semibold text-[var(--color-text)]">Analyzer evidence</h2>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">Evidence from RepoGuard's static analysis</p>
+        <p className="mt-4 break-words text-sm leading-relaxed text-[var(--color-text)]">{fact}</p>
+        <EvidenceSources items={matched.flatMap((item) => item.evidence)} />
+        <dl className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+          <div>
+            <dt className="text-[var(--color-text-faint)]">Tool</dt>
+            <dd className="mt-0.5 text-[var(--color-text)]">{finding.tool}</dd>
+          </div>
+          {finding.category && (
+            <div>
+              <dt className="text-[var(--color-text-faint)]">Category</dt>
+              <dd className="mt-0.5 text-[var(--color-text)]">{finding.category}</dd>
+            </div>
+          )}
+        </dl>
+        {otherEvidence.length > 0 && (
+          <div className="mt-5 space-y-4">
+            <h3 className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-faint)]">
+              Other evidence cited for this file
+            </h3>
+            {otherEvidence.map((item, index) => (
+              <div key={`${item.observation}:${index}`}>
+                <p className="break-words text-sm leading-relaxed text-[var(--color-text)]">{item.observation}</p>
+                <EvidenceSources items={item.evidence} />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <AiInterpretation error={aiError} interpretation={interpretation} />
+
+      {shownLimitations.length > 0 && (
+        <section className="mt-8 border-t border-[var(--color-border)] pt-5">
+          <h2 className="text-base font-semibold text-[var(--color-text)]">Analysis limitations</h2>
+          <ul className="mt-3 space-y-2">
+            {shownLimitations.map((item) => (
+              <li key={item} className="break-words text-sm leading-relaxed text-[var(--color-text-muted)]">
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function EvidenceSources({ items }: { items: FileAiEvidenceReference[] }) {
+  if (items.length === 0) return null;
+  return (
+    <p className="mt-2 break-all text-xs text-[var(--color-text-faint)]">
+      Evidence source {items.map(evidencePointer).join(', ')}
+    </p>
+  );
+}
+
+function AiInterpretation({
+  error,
+  interpretation,
+}: {
+  error: string | null;
+  interpretation: FileAiInterpretation | null;
+}) {
+  return (
+    <section className="mt-8 border-t border-[var(--color-border)] pt-5" aria-live="polite">
+      <h2 className="text-base font-medium text-[var(--color-text-muted)]">AI interpretation</h2>
+      <p className="mt-1 text-xs text-[var(--color-text-muted)]">Model-generated interpretation of the supplied evidence</p>
       {error ? (
-        <p className="text-sm text-[var(--color-text)]">{error}</p>
+        <p className="mt-4 text-sm leading-relaxed text-[var(--color-text)]">{error}</p>
       ) : !interpretation ? (
-        <p className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
-          <LoaderCircle size={14} className="animate-spin text-[var(--color-accent)]" />
-          Generating AI interpretation...
+        <p className="mt-4 flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+          <LoaderCircle size={14} className="animate-spin" aria-hidden />
+          Generating interpretation...
         </p>
       ) : (
-        <div className="space-y-4">
-          <p className="text-sm leading-relaxed text-[var(--color-text)]">{interpretation.summary}</p>
-          <div>
-            <h3 className="text-sm font-medium text-[var(--color-text)]">Observations</h3>
-            {interpretation.observations.length === 0 ? (
-              <p className="mt-2 text-sm text-[var(--color-text-muted)]">No observations were returned.</p>
-            ) : (
-              <ul className="mt-2 space-y-3">
-                {interpretation.observations.map((observation, index) => (
-                  <li key={`${observation.category}:${observation.observation}:${index}`} className="rounded-md border border-[var(--color-border)] px-3 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge>{observation.category}</Badge>
-                      <Badge>{observation.confidence} confidence</Badge>
-                    </div>
-                    <p className="mt-2 text-sm text-[var(--color-text)]">{observation.observation}</p>
-                    <p className="mt-2 text-sm text-[var(--color-text-muted)]">Interpretation: {observation.interpretation}</p>
-                    <ul className="mt-2 space-y-1 text-xs text-[var(--color-text-muted)]">
-                      {observation.evidence.map((item, evidenceIndex) => (
-                        <li key={`${item.source}:${item.field}:${item.index ?? 'none'}:${evidenceIndex}`}>
-                          {item.source}.{item.field}
-                          {item.index === null ? '' : `[${item.index}]`}
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-[var(--color-text)]">Limitations</h3>
-            {interpretation.limitations.length === 0 ? (
-              <p className="mt-2 text-sm text-[var(--color-text-muted)]">No AI limitations were returned.</p>
-            ) : (
-              <ul className="mt-2 space-y-1 text-sm text-[var(--color-text-muted)]">
-                {interpretation.limitations.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            )}
-          </div>
+        <div className="mt-4 space-y-4">
+          {interpretation.summary.trim() !== '' && (
+            <p className="break-words text-sm leading-relaxed text-[var(--color-text)]">{interpretation.summary}</p>
+          )}
+          {interpretation.observations.length === 0 ? (
+            <p className="text-sm text-[var(--color-text-muted)]">No interpretation was returned.</p>
+          ) : (
+            interpretation.observations.map((observation, index) => (
+              <InterpretationItem key={`${observation.interpretation}:${index}`} observation={observation} />
+            ))
+          )}
         </div>
       )}
-    </Card>
+    </section>
+  );
+}
+
+function InterpretationItem({ observation }: { observation: FileAiObservation }) {
+  return (
+    <div>
+      <p className="break-words text-sm leading-relaxed text-[var(--color-text)]">{observation.interpretation}</p>
+      <p className="mt-1 break-all text-xs text-[var(--color-text-faint)]">
+        {observation.confidence} confidence
+        {observation.category.trim() !== '' ? ` · ${observation.category}` : ''}
+        {observation.evidence.length > 0 ? ` · Evidence source ${observation.evidence.map(evidencePointer).join(', ')}` : ''}
+      </p>
+    </div>
   );
 }

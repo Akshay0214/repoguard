@@ -1,35 +1,46 @@
 import { spawn } from 'node:child_process';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { env } from '../config/env.js';
 import type {
   GitAuthorRecord,
   GitCommitRecord,
   GitFileHistory,
   GitHistoryResult,
   GitMostChangedFile,
+  HistoryDepth,
 } from '../types/gitHistory.js';
 
 /**
  * Git history evidence only. This module does not score risk, rank contributors,
  * or call a language model.
  *
- * Acquisition clones with `git clone --depth 1`. A shallow boundary commit has
- * no parent in the clone. Git still prints that commit's numstat as if every
- * current file were added. Those diffs are omitted. Commit metadata is kept,
- * and `summary.isComplete` stays false.
+ * Acquisition clones the requested branch. `GIT_HISTORY_DEPTH=0` (the default)
+ * fetches that branch's history. A positive depth passes `git clone --depth`.
+ * The analyzer records at most `GIT_HISTORY_COMMIT_LIMIT` commits (default 2000).
  *
- * Rename detection uses `git log -M`. A rename is stored on the new path via
- * `renamedFrom`. Older commits remain under the previous path. Rename chains
- * are not stitched together.
+ * A shallow boundary commit has no parent in the clone. Git still prints that
+ * commit's numstat as if every current file were added. Those diffs are omitted.
+ * Commit metadata is kept, and `summary.isComplete` stays false.
+ *
+ * `historyDepth` is `complete` only for a non-shallow clone whose commits and
+ * file records fit the configured caps. `limited` means RepoGuard stopped at a
+ * cap. `shallow` means Git reports a shallow repository and the cap was not hit.
+ *
+ * Rename and copy detection uses `git log -M -C`. A rename is stored on the new
+ * path via `renamedFrom`. Older commits remain under the previous path. Rename
+ * chains are not stitched together.
  *
  * `changeCount` is additions plus deletions. It is not a risk score.
- * `mostChangedFiles` is the highest available commit counts, capped at 20.
+ * `mostChangedFiles` is the highest recorded commit counts, capped at 20.
+ * It is not a risk or debt ranking.
  */
 
 const COMMAND_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 32_000_000;
 const SUBJECT_LIMIT = 200;
 const MOST_CHANGED_LIMIT = 20;
+const MAX_FILE_RECORDS = 5_000;
 
 const resultCache = new Map<string, Promise<GitHistoryResult>>();
 
@@ -44,6 +55,11 @@ export class GitHistoryError extends Error {
     this.name = 'GitHistoryError';
     this.code = code;
   }
+}
+
+interface AuthorAggregate {
+  name: string;
+  commits: number;
 }
 
 interface FileAggregate {
@@ -87,24 +103,32 @@ export async function analyzeGitHistoryWorkspace(workspacePath: string): Promise
   const shallowCommits = await readShallowCommits(root);
   const currentFiles = await readTrackedFiles(root);
 
+  const commitLimit = env.gitHistoryCommitLimit;
   let logText = '';
+  let cloneCommitCount = 0;
   try {
+    const countText = await runGit(root, ['rev-list', '--count', 'HEAD']);
+    cloneCommitCount = Number(countText.trim());
+    if (!Number.isInteger(cloneCommitCount) || cloneCommitCount < 0) cloneCommitCount = 0;
     logText = await runGit(root, [
       'log',
+      '-n',
+      String(commitLimit),
       '--numstat',
       '-M',
+      '-C',
       '--date=iso-strict',
-      '--pretty=format:%x1e%H%x1f%aI%x1f%an%x1f%s',
+      '--pretty=format:%x1e%H%x1f%aI%x1f%an%x1f%ae%x1f%s',
     ]);
   } catch (error) {
-    if (error instanceof GitHistoryError && error.code === 'GIT_FAILED' && /does not have any commits/i.test(error.message)) {
+    if (error instanceof GitHistoryError && error.code === 'GIT_FAILED' && /does not have any commits|unknown revision|ambiguous argument 'HEAD'/i.test(error.message)) {
       return emptyHistory(isShallow, 'The Git repository does not contain any commits.');
     }
     throw error;
   }
 
   const commits: GitCommitRecord[] = [];
-  const authorCounts = new Map<string, number>();
+  const authorsByIdentity = new Map<string, AuthorAggregate>();
   const files = new Map<string, FileAggregate>();
   const errors: GitHistoryResult['errors'] = [];
   let commitsWithoutFileDiff = 0;
@@ -117,14 +141,17 @@ export async function analyzeGitHistoryWorkspace(workspacePath: string): Promise
     if (trimmed.trim() === '') continue;
     const lines = trimmed.split(/\r?\n/);
     const header = (lines[0] ?? '').replace(/\r/g, '');
-    const [hash, rawTimestamp, rawAuthor, rawSubject] = header.split('\x1f');
-    if (!hash || !rawTimestamp || rawAuthor === undefined || rawSubject === undefined) continue;
+    const [hash, rawTimestamp, rawAuthor, rawEmail, rawSubject] = header.split('\x1f');
+    if (!hash || !rawTimestamp || rawAuthor === undefined || rawEmail === undefined || rawSubject === undefined) continue;
 
     const timestamp = toIsoTimestamp(rawTimestamp);
-    const author = rawAuthor.trim().slice(0, SUBJECT_LIMIT) || 'Unknown';
+    const author = normalizeAuthorName(rawAuthor);
     const subject = rawSubject.replace(/\s+/g, ' ').trim().slice(0, SUBJECT_LIMIT);
     commits.push({ hash, author, timestamp, subject });
-    authorCounts.set(author, (authorCounts.get(author) ?? 0) + 1);
+    const identity = `${author}\0${rawEmail.trim().toLowerCase()}`;
+    const existingAuthor = authorsByIdentity.get(identity);
+    if (existingAuthor) existingAuthor.commits += 1;
+    else authorsByIdentity.set(identity, { name: author, commits: 1 });
 
     if (isShallow && (shallowCommits.size === 0 || shallowCommits.has(hash))) {
       commitsWithoutFileDiff += 1;
@@ -166,12 +193,29 @@ export async function analyzeGitHistoryWorkspace(workspacePath: string): Promise
     .slice(0, MOST_CHANGED_LIMIT)
     .map((file) => ({ path: file.path, commitCount: file.commitCount }));
 
-  const authors: GitAuthorRecord[] = [...authorCounts.entries()]
-    .map(([name, commitCount]) => ({ name, commits: commitCount }))
-    .sort((left, right) => left.name.localeCompare(right.name));
+  const returnedFiles = fileRecords.length > MAX_FILE_RECORDS
+    ? [...fileRecords].sort((left, right) => right.commitCount - left.commitCount || left.path.localeCompare(right.path)).slice(0, MAX_FILE_RECORDS)
+    : fileRecords;
+  const filesTruncated = returnedFiles.length < fileRecords.length;
+  const commitsTruncated = cloneCommitCount > commits.length;
+  const truncated = commitsTruncated || filesTruncated;
+  if (commitsTruncated) {
+    errors.push({
+      message: `Git history recorded ${commits.length} of ${cloneCommitCount} commits in this clone. The configured limit is ${commitLimit}.`,
+    });
+  }
+  if (filesTruncated) {
+    errors.push({
+      message: `File history was limited to ${MAX_FILE_RECORDS} paths. Totals still include every recorded file change.`,
+    });
+  }
+
+  const authors: GitAuthorRecord[] = [...authorsByIdentity.values()]
+    .sort((left, right) => left.name.localeCompare(right.name) || right.commits - left.commits);
 
   const newest = commits[0]?.timestamp ?? null;
   const oldest = commits[commits.length - 1]?.timestamp ?? null;
+  const historyDepth = historyDepthFor(isShallow, truncated);
 
   return {
     summary: {
@@ -182,16 +226,30 @@ export async function analyzeGitHistoryWorkspace(workspacePath: string): Promise
       totalDeletions,
       oldestAvailableCommitAt: oldest,
       newestAvailableCommitAt: newest,
-      historyDepth: isShallow ? 'shallow' : 'complete',
-      isComplete: !isShallow && commits.length > 0,
+      historyDepth,
+      isComplete: historyDepth === 'complete' && commits.length > 0,
       commitsWithoutFileDiff,
+      cloneCommitCount,
+      truncated,
+      commitLimit: commitsTruncated ? commitLimit : null,
     },
     commits,
     authors,
-    files: fileRecords,
+    files: returnedFiles,
     mostChangedFiles,
     errors,
   };
+}
+
+function historyDepthFor(isShallow: boolean, truncated: boolean): HistoryDepth {
+  if (truncated) return 'limited';
+  if (isShallow) return 'shallow';
+  return 'complete';
+}
+
+function normalizeAuthorName(value: string): string {
+  const name = value.replace(/\s+/g, ' ').trim().slice(0, SUBJECT_LIMIT);
+  return name === '' ? 'Unknown' : name;
 }
 
 function emptyHistory(isShallow: boolean, message: string): GitHistoryResult {
@@ -207,6 +265,9 @@ function emptyHistory(isShallow: boolean, message: string): GitHistoryResult {
       historyDepth: isShallow ? 'shallow' : 'complete',
       isComplete: false,
       commitsWithoutFileDiff: 0,
+      cloneCommitCount: 0,
+      truncated: false,
+      commitLimit: null,
     },
     commits: [],
     authors: [],

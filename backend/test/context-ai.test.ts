@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { buildAcquiredContext, ContextRequestError, normalizeRepositoryPath } from '../src/services/contextBuilderService.js';
-import { LlmError, requireAiConfig, validateModelInterpretation, interpretAcquiredContext } from '../src/services/llmService.js';
+import { LlmError, requireAiConfig, validateModelInterpretation, interpretAcquiredContext, interpretationRequest } from '../src/services/llmService.js';
 import type { RepositoryContext } from '../src/types/context.js';
 
 const execFileAsync = promisify(execFile);
@@ -139,6 +139,109 @@ test('AI validation accepts grounded output and rejects schema, pointers, and mi
   assert.throws(() => requireAiConfig({ apiKey: '', model: '' }), LlmError);
 });
 
+test('AI interpretation may explain cited evidence and may not add an unsupported analyzer fact', () => {
+  const context = fileContext();
+  const grounded = validateModelInterpretation(
+    context,
+    JSON.stringify({
+      summary: 'The file has one static finding.',
+      observations: [
+        {
+          category: 'static finding',
+          interpretation: 'This may warrant review because constant conditions can make control flow harder to reason about.',
+          evidence: [{ source: 'static', field: 'finding', index: 0 }],
+          confidence: 'medium',
+        },
+      ],
+      limitations: ['Git history was not supplied for this file.'],
+    }),
+  );
+  assert.match(grounded.observations[0]?.observation ?? '', /no-constant-condition/);
+  assert.match(grounded.observations[0]?.observation ?? '', /line 2/);
+  assert.doesNotMatch(grounded.observations[0]?.interpretation ?? '', /git history/i);
+
+  const unsupported = {
+    summary: 'The file has one static finding.',
+    observations: [
+      {
+        category: 'static finding',
+        interpretation: 'This file has incomplete Git history.',
+        evidence: [{ source: 'static', field: 'finding', index: 0 }],
+        confidence: 'low',
+      },
+    ],
+    limitations: [],
+  };
+  assert.throws(() => validateModelInterpretation(context, JSON.stringify(unsupported)), (error: unknown) => {
+    assert.ok(error instanceof LlmError);
+    assert.equal(error.code, 'INVALID_RESPONSE');
+    assert.match(error.message, /Git-history/);
+    return true;
+  });
+
+  const truncated = {
+    summary: 'Static findings for this file may be capped.',
+    observations: [
+      {
+        category: 'limitations',
+        interpretation: 'The Git history for this file is incomplete.',
+        evidence: [{ source: 'static', field: 'findingsTruncated', index: null }],
+        confidence: 'low',
+      },
+    ],
+    limitations: [],
+  };
+  assert.throws(() => validateModelInterpretation(context, JSON.stringify(truncated)), LlmError);
+
+  const noEdges = {
+    summary: 'Dependency truncation is recorded.',
+    observations: [
+      {
+        category: 'dependencies',
+        interpretation: 'This file has no dependencies.',
+        evidence: [{ source: 'dependencies', field: 'dependenciesTruncated', index: null }],
+        confidence: 'low',
+      },
+    ],
+    limitations: [],
+  };
+  assert.throws(() => validateModelInterpretation(context, JSON.stringify(noEdges)), (error: unknown) => {
+    assert.ok(error instanceof LlmError);
+    assert.match(error.message, /dependency/);
+    return true;
+  });
+
+  const historyCited = validateModelInterpretation(context, JSON.stringify({
+    summary: 'History coverage is part of the supplied evidence.',
+    observations: [
+      {
+        category: 'history',
+        interpretation: 'The cited history flag means Git history for this file is incomplete.',
+        evidence: [{ source: 'history', field: 'isComplete', index: null }],
+        confidence: 'high',
+      },
+    ],
+    limitations: [],
+  }));
+  assert.match(historyCited.observations[0]?.observation ?? '', /isComplete/);
+});
+
+test('file AI requests cite the static finding and omit other analyzers', () => {
+  const file = interpretationRequest(fileContext());
+  assert.deepEqual(file.pointers, [{ source: 'static', field: 'finding', index: 0 }]);
+  assert.equal(file.user.includes('History is incomplete'), false);
+  assert.equal(file.user.includes('dependencies'), false);
+  assert.match(file.user, /no-constant-condition/);
+  assert.doesNotMatch(file.instructions, /State important incomplete evidence/);
+
+  const summary = interpretationRequest(summaryContext());
+  assert.equal(
+    summary.pointers.some((pointer) => pointer.source === 'history'),
+    true,
+  );
+  assert.match(summary.user, /availableCommits/);
+});
+
 test('AI interpretation cache returns the same in-flight promise', async () => {
   const context = summaryContext();
   const config = { apiKey: 'sk-test', model: 'cache-test-model' };
@@ -196,5 +299,59 @@ function summaryContext(): RepositoryContext {
       rules: [],
     },
     limitations: [],
+  };
+}
+
+function fileContext(): RepositoryContext {
+  return {
+    mode: 'file',
+    repository: { name: 'fixture', branch: 'main', sourceType: 'zip' },
+    file: {
+      path: 'src/app.js',
+      truncated: false,
+      ast: {
+        lineCount: 2,
+        functionCount: 0,
+        classCount: 0,
+        importCount: 0,
+        exportCount: 1,
+        maxNestingDepth: 1,
+        functions: [],
+        functionsTruncated: false,
+      },
+      dependencies: { outgoing: [], incoming: [], external: [], unresolved: [], truncated: false },
+      history: {
+        commitCount: 0,
+        additions: 0,
+        deletions: 0,
+        changeCount: 0,
+        firstSeenAt: '',
+        lastChangedAt: '',
+        renamedFrom: null,
+        presentInWorkTree: true,
+        historyDepth: 'shallow',
+        isComplete: false,
+      },
+      static: {
+        repositoryConfigUsed: false,
+        ruleSet: 'repoguard-fixed',
+        repositoryTruncated: false,
+        findingsTruncated: false,
+        findings: [
+          {
+            path: 'src/app.js',
+            line: 2,
+            column: 5,
+            ruleId: 'no-constant-condition',
+            severity: 'error',
+            message: 'Unexpected constant condition.',
+            tool: 'eslint',
+            category: 'problem',
+          },
+        ],
+        issues: [],
+      },
+    },
+    limitations: [{ source: 'history', message: 'Git history is shallow and incomplete.' }],
   };
 }
