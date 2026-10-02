@@ -10,7 +10,7 @@ wired in later with minimal changes.
 ```bash
 npm install
 npm run dev       # start the dev server (http://localhost:5173)
-npm run build     # type-check + production build to dist/
+npm run build     # production build to dist/
 npm run preview   # preview the production build locally
 ```
 
@@ -18,7 +18,7 @@ Requires Node 18+.
 
 ## Tech stack
 
-- React 19 + Vite + TypeScript
+- React 19 + Vite + JavaScript
 - Tailwind CSS v4
 - React Router v7
 - Lucide React (icons)
@@ -46,7 +46,7 @@ src/
   types/              Shared domain types (Issue, RepositoryOverview, etc.)
   data/mock/           Centralized mock data — one file per domain concept
   services/
-    repositoryService.ts   The API integration boundary. Every page calls
+    repositoryService.js   The API integration boundary. Every page calls
                             through here (analyzeRepository, getIssues, ...).
                             Swap the function bodies for real fetch() calls
                             when the backend is ready — no page changes needed.
@@ -60,7 +60,7 @@ src/
 
 ### Where a real backend plugs in
 
-`src/services/repositoryService.ts` is the only file that should need to
+`src/services/repositoryService.js` is the only file that should need to
 change to connect real data:
 
 - `analyzeRepository()` → POST to a job endpoint, subscribe to progress via
@@ -80,5 +80,5 @@ This build intentionally does **not** implement GitHub integration,
 repository cloning, AST/static analysis, dependency parsing, Git history
 analysis, a database, real authentication, or LLM calls — per the frontend
 MVP scope. All data is centralized in `src/data/mock/` and served through
-`repositoryService.ts` so the next phase (real analysis engine) is a
+`repositoryService.js` so the next phase (real analysis engine) is a
 backend/service-layer task, not a frontend rewrite.

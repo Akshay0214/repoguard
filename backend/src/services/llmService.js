@@ -1,0 +1,810 @@
+import OpenAI, { APIConnectionError, APIConnectionTimeoutError, APIError, AuthenticationError, RateLimitError, } from 'openai';
+import { env } from '../config/env.js';
+/**
+ * Interprets bounded RepoGuard context. This module does not score health,
+ * rank files, or read the repository.
+ *
+ * The provider must return JSON that matches a strict json_schema. The parsed
+ * object is checked again before it is returned. Failed provider calls are not cached.
+ *
+ * Output bounds: summary at most 1200 characters, at most 6 observations,
+ * at most 4 evidence references each, and at most 10 limitation strings.
+ *
+ * Evidence items are pointers into the supplied context. A pointer that does
+ * not name a present field is rejected. The factual observation is rendered
+ * from those pointers. Interpretation may discuss implications of those
+ * pointers, and it is rejected when it asserts a different analyzer's facts.
+ */
+const REQUEST_TIMEOUT_MS = 45_000;
+const MAX_SUMMARY = 1_200;
+const MAX_OBSERVATIONS = 6;
+const MAX_EVIDENCE = 4;
+const MAX_LIMITATIONS = 10;
+const MAX_TEXT = 500;
+const EVIDENCE_SOURCES = ['ast', 'static', 'dependencies', 'history', 'repository'];
+const EVIDENCE_FIELDS = [
+    'path',
+    'fileTruncated',
+    'lineCount',
+    'functionCount',
+    'classCount',
+    'importCount',
+    'exportCount',
+    'maxNestingDepth',
+    'functionsTruncated',
+    'function',
+    'totalFiles',
+    'totalLines',
+    'totalFunctions',
+    'totalClasses',
+    'totalImports',
+    'totalExports',
+    'parseErrors',
+    'repositoryConfigUsed',
+    'ruleSet',
+    'findingsTruncated',
+    'repositoryTruncated',
+    'finding',
+    'issue',
+    'filesAnalyzed',
+    'findingCount',
+    'errorCount',
+    'warningCount',
+    'staticTruncated',
+    'issueCountExecution',
+    'issueCountParse',
+    'issueCountLimit',
+    'rule',
+    'totalInternalNodes',
+    'totalInternalEdges',
+    'totalExternalPackages',
+    'unresolvedImports',
+    'filesWithDependencies',
+    'filesWithNoDependencies',
+    'maxOutgoingInternalDependencies',
+    'outgoing',
+    'incoming',
+    'external',
+    'unresolved',
+    'dependenciesTruncated',
+    'availableCommits',
+    'uniqueAuthors',
+    'totalFileChanges',
+    'totalAdditions',
+    'totalDeletions',
+    'oldestAvailableCommitAt',
+    'newestAvailableCommitAt',
+    'commitsWithoutFileDiff',
+    'commitCount',
+    'additions',
+    'deletions',
+    'changeCount',
+    'firstSeenAt',
+    'lastChangedAt',
+    'renamedFrom',
+    'presentInWorkTree',
+    'historyDepth',
+    'isComplete',
+    'name',
+    'branch',
+    'sourceType',
+];
+const INDEXED_FIELDS = new Set(['function', 'finding', 'issue', 'rule', 'outgoing', 'incoming', 'external', 'unresolved']);
+const SYSTEM_INSTRUCTIONS = [
+    'You interpret structured repository evidence produced by RepoGuard.',
+    'Use only the JSON context in the user message. Do not invent files, metrics, line numbers, or source code.',
+    'Do not write the factual observation. RepoGuard renders that sentence from the evidence pointers you cite.',
+    'Each observation has category, confidence, evidence, and interpretation.',
+    'RepoGuard renders the factual observation from the evidence pointers. interpretation is separate: it may explain implications, uncertainty, or why that cited fact may matter.',
+    'interpretation must not add a repository or file fact that those pointers do not establish.',
+    'A pointer supports only its own fact. static.findingsTruncated means the static finding list hit a cap. It does not establish Git history, dependency coverage, AST coverage, risk, or technical debt.',
+    'Do not mention Git, commits, authors, clones, blame, diffs, or history unless that observation cites history evidence.',
+    'Do not mention dependencies, imports, exports, or packages unless that observation cites dependency evidence or an import or export count.',
+    'Do not mention ESLint configuration or the rule set unless that observation cites repositoryConfigUsed or ruleSet.',
+    'A dependenciesTruncated pointer does not establish that the file has no dependency edges.',
+    'If the cited evidence is not enough to explain a cause, say the evidence is insufficient. Do not borrow an explanation from a different analyzer.',
+    'Limitations may mention missing or shallow Git history only when the supplied context already records that history is missing, shallow, or incomplete.',
+    'Valid interpretation of a static finding: constant conditions can make control flow harder to reason about.',
+    'Invalid interpretation of a static finding or findingsTruncated: this file has incomplete Git history.',
+    'Each evidence item is an object with source, field, and index. index is null for a scalar and the list position for one item.',
+    'The response schema lists only the evidence pointers present for this request. Cite those pointers and no others.',
+    'source is ast, static, dependencies, history, or repository. field must be one of the allowed field names.',
+    'Cite only a field that is present in the supplied context. If dependencies, history, or repository are absent, do not cite them and do not claim that those values are zero, empty, or absent.',
+    'For a file, source ast field path is file.path and field fileTruncated is file.truncated. File AST scalars are lineCount, functionCount, classCount, importCount, exportCount, maxNestingDepth, and functionsTruncated. A function uses field function and its index.',
+    'A file static finding uses source static, field finding, and its index. A file static issue uses field issue and its index. findingsTruncated, repositoryConfigUsed, and ruleSet are scalar static fields. repositoryTruncated exists only when that boolean is in the context.',
+    'Repository-summary AST uses source ast and totalFiles, totalLines, totalFunctions, totalClasses, totalImports, totalExports, parseErrors, or maxNestingDepth.',
+    'Repository-summary static counts use filesAnalyzed, findingCount, errorCount, warningCount, staticTruncated, issueCountExecution, issueCountParse, or issueCountLimit. A rule count uses field rule and its index.',
+    'File dependency relationships use source dependencies and field outgoing, incoming, external, or unresolved with an index. dependenciesTruncated is the scalar cap flag. Summary dependency counts use totalInternalNodes, totalInternalEdges, totalExternalPackages, unresolvedImports, filesWithDependencies, filesWithNoDependencies, or maxOutgoingInternalDependencies.',
+    'File Git history uses source history and commitCount, additions, deletions, changeCount, firstSeenAt, lastChangedAt, renamedFrom, presentInWorkTree, historyDepth, or isComplete. Cite these only when the history object is present.',
+    'Repository-summary history uses availableCommits, uniqueAuthors, totalFileChanges, totalAdditions, totalDeletions, oldestAvailableCommitAt, newestAvailableCommitAt, historyDepth, isComplete, or commitsWithoutFileDiff.',
+    'Repository identity uses source repository and field name, branch, or sourceType, only when repository is in the context.',
+    'Do not produce a health score, a technical-debt score, or a ranking of files.',
+    'Do not treat a metric as technical debt or as proof of a bug.',
+    'Shallow or incomplete Git history is not the repository\'s full history.',
+    'Parse errors mean those files were not successfully analyzed.',
+    'Unresolved imports are not resolved dependencies.',
+    'Static evidence is only the static object supplied in the context. Do not invent findings, rule IDs, lines, messages, or files.',
+    'Do not call ESLint and do not read repository files directly.',
+    'A static finding is a match against RepoGuard\'s fixed rules. It is not automatically technical debt, a health score, or proof of a bug.',
+    'repositoryConfigUsed=false means the repository\'s ESLint or CI configuration was not used.',
+    'Static issues are parse, execution, or limit issues, not rule findings.',
+    'If static analysis is truncated or a static limitation is present, say that static coverage is incomplete. An empty finding list under incomplete coverage must not be described as clean.',
+    'State important incomplete evidence in limitations.',
+    'Write a short summary and at most 6 observations.',
+].join(' ');
+const FILE_FINDING_INSTRUCTIONS = [
+    'Interpret the static-analysis findings in the user message.',
+    'Cite a finding as source static, field finding, and its index. Cite a static issue as source static, field issue, and its index.',
+    'Do not write the factual observation. RepoGuard renders that sentence from the evidence pointers you cite.',
+    'summary and interpretation may explain why a cited finding can make the code harder to reason about.',
+    'Do not state facts about Git history, dependencies, imports, packages, AST metrics, repository health, or technical debt.',
+    'Do not discuss any analyzer other than the cited finding or issue.',
+    'Write a short summary and at most one observation per cited finding or issue.',
+    'Leave limitations empty unless the user message itself states a limitation.',
+].join(' ');
+export function interpretationRequest(context) {
+    const findingPointers = fileFindingPointers(context);
+    if (findingPointers) {
+        return {
+            instructions: FILE_FINDING_INSTRUCTIONS,
+            user: JSON.stringify(fileFindingPayload(context)),
+            pointers: findingPointers,
+        };
+    }
+    return {
+        instructions: SYSTEM_INSTRUCTIONS,
+        user: JSON.stringify(context),
+        pointers: listEvidencePointers(context),
+    };
+}
+function fileFindingPointers(context) {
+    if (context.mode !== 'file')
+        return null;
+    const pointers = [];
+    context.file.static.findings.forEach((_, index) => {
+        pointers.push({ source: 'static', field: 'finding', index });
+    });
+    context.file.static.issues.forEach((_, index) => {
+        pointers.push({ source: 'static', field: 'issue', index });
+    });
+    return pointers.length > 0 ? pointers : null;
+}
+function fileFindingPayload(context) {
+    if (context.mode !== 'file')
+        return context;
+    return {
+        path: context.file.path,
+        findings: context.file.static.findings.map((finding, index) => ({ index, ...finding })),
+        issues: context.file.static.issues.map((issue, index) => ({ index, ...issue })),
+    };
+}
+function responseFormatFor(pointers) {
+    return {
+        type: 'json_schema',
+        json_schema: {
+            name: 'repoguard_interpretation',
+            description: 'Grounded interpretation of RepoGuard repository evidence.',
+            strict: true,
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['summary', 'observations', 'limitations'],
+                properties: {
+                    summary: { type: 'string' },
+                    observations: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            additionalProperties: false,
+                            required: ['category', 'interpretation', 'evidence', 'confidence'],
+                            properties: {
+                                category: { type: 'string' },
+                                interpretation: {
+                                    type: 'string',
+                                    description: 'Implication of this observation’s evidence pointers only. Do not state Git history, dependency, AST, or configuration facts unless those pointers are in this evidence array.',
+                                },
+                                evidence: {
+                                    type: 'array',
+                                    items: {
+                                        anyOf: pointers.map((pointer) => ({
+                                            type: 'object',
+                                            additionalProperties: false,
+                                            required: ['source', 'field', 'index'],
+                                            properties: {
+                                                source: { type: 'string', enum: [pointer.source] },
+                                                field: { type: 'string', enum: [pointer.field] },
+                                                index: pointer.index === null ? { type: 'null' } : { type: 'integer', enum: [pointer.index] },
+                                            },
+                                        })),
+                                    },
+                                },
+                                confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
+                            },
+                        },
+                    },
+                    limitations: { type: 'array', items: { type: 'string' } },
+                },
+            },
+        },
+    };
+}
+export class LlmError extends Error {
+    code;
+    constructor(code, message) {
+        super(message);
+        this.name = 'LlmError';
+        this.code = code;
+    }
+}
+const resultCache = new Map();
+export function readAiConfig() {
+    return { apiKey: env.openaiApiKey, model: env.openaiModel };
+}
+export function requireAiConfig(config) {
+    if (config.apiKey === '') {
+        throw new LlmError('NOT_CONFIGURED', 'OPENAI_API_KEY is not configured.');
+    }
+    if (config.model === '') {
+        throw new LlmError('NOT_CONFIGURED', 'OPENAI_MODEL is not configured.');
+    }
+    return config;
+}
+export function interpretAcquiredContext(cacheKey, context, config = readAiConfig()) {
+    const configured = requireAiConfig(config);
+    const key = `${cacheKey}:${configured.model}`;
+    const cached = resultCache.get(key);
+    if (cached)
+        return cached;
+    const pending = requestInterpretation(context, configured).catch((error) => {
+        resultCache.delete(key);
+        throw error;
+    });
+    resultCache.set(key, pending);
+    return pending;
+}
+export async function requestInterpretation(context, config) {
+    const configured = requireAiConfig(config);
+    const client = new OpenAI({
+        apiKey: configured.apiKey,
+        timeout: REQUEST_TIMEOUT_MS,
+        maxRetries: 0,
+    });
+    try {
+        const request = interpretationRequest(context);
+        const messages = [
+            { role: 'system', content: request.instructions },
+            { role: 'user', content: request.user },
+        ];
+        let rejection;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+            if (rejection) {
+                messages.push({
+                    role: 'user',
+                    content: `The previous interpretation was rejected: ${rejection.message} Return a new structured interpretation. Keep factual claims inside the cited evidence pointers.`,
+                });
+            }
+            const completion = await client.chat.completions.create({
+                model: configured.model,
+                temperature: 0.2,
+                max_completion_tokens: 900,
+                messages,
+                response_format: responseFormatFor(request.pointers),
+            });
+            const message = completion.choices[0]?.message;
+            if (!message || message.refusal) {
+                rejection = new LlmError('INVALID_RESPONSE', 'The AI provider declined to produce a structured interpretation.');
+                continue;
+            }
+            if (typeof message.content !== 'string' || message.content.trim() === '') {
+                rejection = new LlmError('INVALID_RESPONSE', 'The AI provider returned an empty interpretation.');
+                continue;
+            }
+            try {
+                return validateModelInterpretation(context, message.content);
+            }
+            catch (error) {
+                if (!(error instanceof LlmError) || error.code !== 'INVALID_RESPONSE')
+                    throw error;
+                rejection = error;
+            }
+        }
+        throw rejection ?? new LlmError('INVALID_RESPONSE', 'The AI provider returned an empty interpretation.');
+    }
+    catch (error) {
+        if (error instanceof LlmError)
+            throw error;
+        throw toLlmError(error);
+    }
+}
+export function validateModelInterpretation(context, content) {
+    return preserveContextLimitations(context, parseInterpretation(content, context));
+}
+function parseInterpretation(content, context) {
+    let parsed;
+    try {
+        parsed = JSON.parse(content);
+    }
+    catch {
+        throw validationError('invalid_json');
+    }
+    if (!isRecord(parsed) || !hasExactKeys(parsed, ['summary', 'observations', 'limitations'])) {
+        throw validationError('schema');
+    }
+    const summary = requireText(parsed.summary, MAX_SUMMARY);
+    const observations = attachObservedFacts(context, parseObservations(parsed.observations));
+    assertNarrativeClaims(summary, observations);
+    const limitations = parseLimitationStrings(parsed.limitations);
+    assertLimitationClaims(context, limitations);
+    return { summary, observations, limitations };
+}
+function parseObservations(value) {
+    if (!Array.isArray(value))
+        throw validationError('schema');
+    if (value.length > MAX_OBSERVATIONS)
+        throw validationError('bounds');
+    return value.map((item) => {
+        if (!isRecord(item) || !hasExactKeys(item, ['category', 'interpretation', 'evidence', 'confidence'])) {
+            throw validationError('schema');
+        }
+        const category = requireText(item.category, 80);
+        const interpretation = requireText(item.interpretation, MAX_TEXT);
+        const evidence = parseEvidence(item.evidence);
+        if (!isConfidence(item.confidence))
+            throw validationError('schema');
+        return { category, interpretation, evidence, confidence: item.confidence };
+    });
+}
+function attachObservedFacts(context, observations) {
+    assertEvidenceSupported(context, observations);
+    return observations.map((observation) => ({
+        ...observation,
+        observation: observation.evidence.map((evidence) => renderObservedFact(context, evidence)).join(' '),
+    }));
+}
+function parseEvidence(value) {
+    if (!Array.isArray(value))
+        throw validationError('schema');
+    if (value.length === 0 || value.length > MAX_EVIDENCE)
+        throw validationError('bounds');
+    return value.map((item) => {
+        if (!isRecord(item) || !hasExactKeys(item, ['source', 'field', 'index']))
+            throw validationError('schema');
+        if (!isEvidenceSource(item.source) || !isEvidenceField(item.field))
+            throw validationError('schema');
+        if (!(item.index === null || (typeof item.index === 'number' && Number.isInteger(item.index) && item.index >= 0))) {
+            throw validationError('schema');
+        }
+        if (INDEXED_FIELDS.has(item.field) !== (item.index !== null)) {
+            throw unsupportedReference(item.source, item.field, item.index);
+        }
+        return { source: item.source, field: item.field, index: item.index };
+    });
+}
+function parseLimitationStrings(value) {
+    if (!Array.isArray(value))
+        throw validationError('schema');
+    if (value.length > MAX_LIMITATIONS)
+        throw validationError('bounds');
+    return value.map((item) => requireText(item, MAX_TEXT));
+}
+function requireText(value, max) {
+    if (typeof value !== 'string')
+        throw validationError('schema');
+    const text = value.replace(/\s+/g, ' ').trim();
+    if (text === '' || text.length > max)
+        throw validationError('bounds');
+    return text;
+}
+function assertEvidenceSupported(context, observations) {
+    const catalog = evidenceCatalog(context);
+    for (const observation of observations) {
+        for (const evidence of observation.evidence) {
+            const key = evidence.index === null ? `${evidence.source}\0${evidence.field}` : `${evidence.source}\0${evidence.field}\0${evidence.index}`;
+            if (!catalog.has(key))
+                throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+        }
+    }
+}
+function listEvidencePointers(context) {
+    const pointers = [];
+    const add = (source, field, index = null) => {
+        pointers.push({ source, field, index });
+    };
+    const addRange = (source, field, count) => {
+        for (let index = 0; index < count; index += 1)
+            add(source, field, index);
+    };
+    if (context.mode === 'repository-summary') {
+        add('repository', 'name');
+        add('repository', 'branch');
+        add('repository', 'sourceType');
+        for (const field of ['totalFiles', 'totalLines', 'totalFunctions', 'totalClasses', 'totalImports', 'totalExports', 'parseErrors', 'maxNestingDepth']) {
+            add('ast', field);
+        }
+        for (const field of [
+            'totalInternalNodes',
+            'totalInternalEdges',
+            'totalExternalPackages',
+            'unresolvedImports',
+            'filesWithDependencies',
+            'filesWithNoDependencies',
+            'maxOutgoingInternalDependencies',
+        ]) {
+            add('dependencies', field);
+        }
+        for (const field of [
+            'availableCommits',
+            'uniqueAuthors',
+            'totalFileChanges',
+            'totalAdditions',
+            'totalDeletions',
+            'oldestAvailableCommitAt',
+            'newestAvailableCommitAt',
+            'historyDepth',
+            'isComplete',
+            'commitsWithoutFileDiff',
+        ]) {
+            add('history', field);
+        }
+        add('static', 'filesAnalyzed');
+        add('static', 'findingCount');
+        add('static', 'errorCount');
+        add('static', 'warningCount');
+        add('static', 'staticTruncated');
+        add('static', 'repositoryConfigUsed');
+        add('static', 'ruleSet');
+        add('static', 'issueCountExecution');
+        add('static', 'issueCountParse');
+        add('static', 'issueCountLimit');
+        addRange('static', 'rule', context.static.rules.length);
+        return pointers;
+    }
+    add('ast', 'path');
+    add('ast', 'fileTruncated');
+    if (context.file.ast) {
+        for (const field of ['lineCount', 'functionCount', 'classCount', 'importCount', 'exportCount', 'maxNestingDepth', 'functionsTruncated']) {
+            add('ast', field);
+        }
+        addRange('ast', 'function', context.file.ast.functions.length);
+    }
+    add('static', 'repositoryConfigUsed');
+    add('static', 'ruleSet');
+    add('static', 'findingsTruncated');
+    if ('repositoryTruncated' in context.file.static)
+        add('static', 'repositoryTruncated');
+    addRange('static', 'finding', context.file.static.findings.length);
+    addRange('static', 'issue', context.file.static.issues.length);
+    if (context.mode === 'experiment-file-baseline')
+        return pointers;
+    add('repository', 'name');
+    add('repository', 'branch');
+    add('repository', 'sourceType');
+    const dependencies = context.mode === 'file' ? context.file.dependencies : context.dependencies;
+    add('dependencies', 'dependenciesTruncated');
+    addRange('dependencies', 'outgoing', dependencies.outgoing.length);
+    addRange('dependencies', 'incoming', dependencies.incoming.length);
+    addRange('dependencies', 'external', dependencies.external.length);
+    addRange('dependencies', 'unresolved', dependencies.unresolved.length);
+    const history = context.mode === 'file' ? context.file.history : context.history;
+    if (history) {
+        for (const field of [
+            'commitCount',
+            'additions',
+            'deletions',
+            'changeCount',
+            'firstSeenAt',
+            'lastChangedAt',
+            'renamedFrom',
+            'presentInWorkTree',
+            'historyDepth',
+            'isComplete',
+        ]) {
+            add('history', field);
+        }
+    }
+    return pointers;
+}
+function evidenceCatalog(context) {
+    const keys = new Set();
+    for (const evidence of listEvidencePointers(context)) {
+        keys.add(evidence.index === null ? `${evidence.source}\0${evidence.field}` : `${evidence.source}\0${evidence.field}\0${evidence.index}`);
+    }
+    return keys;
+}
+function renderObservedFact(context, evidence) {
+    const pointer = `${evidence.source}.${evidence.field}${evidence.index === null ? '' : `[${evidence.index}]`}`;
+    if (context.mode === 'repository-summary')
+        return renderSummaryFact(context, evidence, pointer);
+    return renderFileFact(context, evidence, pointer);
+}
+function renderSummaryFact(context, evidence, pointer) {
+    if (evidence.source === 'repository')
+        return `${pointer} is ${textValue(context.repository[evidence.field])}.`;
+    if (evidence.source === 'ast')
+        return `${pointer} is ${textValue(context.ast[evidence.field])}.`;
+    if (evidence.source === 'dependencies') {
+        return `${pointer} is ${textValue(context.dependencies[evidence.field])}.`;
+    }
+    if (evidence.source === 'history')
+        return `${pointer} is ${textValue(context.history[evidence.field])}.`;
+    if (evidence.field === 'rule' && evidence.index !== null) {
+        const rule = context.static.rules[evidence.index];
+        if (!rule)
+            throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+        return `${pointer} is rule ${rule.ruleId} with severity ${rule.severity}, category ${rule.category ?? 'none'}, and count ${rule.count}.`;
+    }
+    const staticField = evidence.field === 'staticTruncated' ? 'truncated' : evidence.field;
+    const staticMap = {
+        filesAnalyzed: context.static.filesAnalyzed,
+        findingCount: context.static.findingCount,
+        errorCount: context.static.errorCount,
+        warningCount: context.static.warningCount,
+        truncated: context.static.truncated,
+        repositoryConfigUsed: context.static.repositoryConfigUsed,
+        ruleSet: context.static.ruleSet,
+        issueCountExecution: context.static.issueCounts.execution,
+        issueCountParse: context.static.issueCounts.parse,
+        issueCountLimit: context.static.issueCounts.limit,
+    };
+    if (!(staticField in staticMap))
+        throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+    return `${pointer} is ${textValue(staticMap[staticField])}.`;
+}
+function renderFileFact(context, evidence, pointer) {
+    const filePath = context.file.path;
+    if (evidence.source === 'repository') {
+        if (context.mode === 'experiment-file-baseline')
+            throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+        return `${pointer} is ${textValue(context.repository[evidence.field])}.`;
+    }
+    if (evidence.source === 'ast') {
+        if (evidence.field === 'path')
+            return `${pointer} is ${filePath}.`;
+        if (evidence.field === 'fileTruncated')
+            return `${pointer} is ${context.file.truncated}.`;
+        if (!context.file.ast)
+            throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+        if (evidence.field === 'function' && evidence.index !== null) {
+            const fn = context.file.ast.functions[evidence.index];
+            if (!fn)
+                throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+            return `${pointer} is function ${fn.name ?? 'anonymous'} at line ${fn.line} with nesting depth ${fn.nestingDepth}.`;
+        }
+        const astValue = context.file.ast[evidence.field];
+        if (typeof astValue === 'object')
+            throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+        return `${pointer} is ${textValue(astValue)}.`;
+    }
+    if (evidence.source === 'static') {
+        if (evidence.field === 'finding' && evidence.index !== null) {
+            const finding = context.file.static.findings[evidence.index];
+            if (!finding)
+                throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+            const line = finding.line === null ? 'an unknown line' : `line ${finding.line}`;
+            const column = finding.column === null ? 'an unknown column' : `column ${finding.column}`;
+            return `${finding.path} has a ${finding.ruleId} finding at ${line}, ${column}: ${finding.message}`;
+        }
+        if (evidence.field === 'issue' && evidence.index !== null) {
+            const issue = context.file.static.issues[evidence.index];
+            if (!issue)
+                throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+            return `${pointer} is a ${issue.kind} issue: ${issue.message}`;
+        }
+        if (evidence.field === 'repositoryTruncated' && 'repositoryTruncated' in context.file.static) {
+            return `${pointer} is ${context.file.static.repositoryTruncated}.`;
+        }
+        const staticScalars = {
+            repositoryConfigUsed: context.file.static.repositoryConfigUsed,
+            ruleSet: context.file.static.ruleSet,
+            findingsTruncated: context.file.static.findingsTruncated,
+        };
+        if (evidence.field in staticScalars)
+            return `${pointer} is ${textValue(staticScalars[evidence.field])}.`;
+        throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+    }
+    if (evidence.source === 'dependencies') {
+        if (context.mode === 'experiment-file-baseline')
+            throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+        const dependencies = context.mode === 'file' ? context.file.dependencies : context.dependencies;
+        if (evidence.field === 'dependenciesTruncated')
+            return `${pointer} is ${dependencies.truncated}.`;
+        if (evidence.index === null)
+            throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+        if (evidence.field === 'outgoing') {
+            const edge = dependencies.outgoing[evidence.index];
+            if (!edge)
+                throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+            return `${filePath} has an outgoing ${edge.kind} relationship to ${edge.path} with specifier ${edge.importSpecifier}.`;
+        }
+        if (evidence.field === 'incoming') {
+            const edge = dependencies.incoming[evidence.index];
+            if (!edge)
+                throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+            return `${filePath} has an incoming ${edge.kind} relationship from ${edge.path} with specifier ${edge.importSpecifier}.`;
+        }
+        if (evidence.field === 'external') {
+            const edge = dependencies.external[evidence.index];
+            if (!edge)
+                throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+            return `${filePath} has an external ${edge.kind} dependency on ${edge.name} with specifier ${edge.importSpecifier}.`;
+        }
+        const item = dependencies.unresolved[evidence.index];
+        if (!item || evidence.field !== 'unresolved')
+            throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+        return `${filePath} has an unresolved ${item.kind} import ${item.importSpecifier}: ${item.message}`;
+    }
+    if (context.mode === 'experiment-file-baseline')
+        throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+    const history = context.mode === 'file' ? context.file.history : context.history;
+    if (!history)
+        throw unsupportedReference(evidence.source, evidence.field, evidence.index);
+    const historyValue = history[evidence.field];
+    return `${pointer} is ${textValue(historyValue)}.`;
+}
+function textValue(value) {
+    if (value === null || value === undefined)
+        return 'null';
+    return String(value);
+}
+const GIT_HISTORY_CLAIM = /\bgit\b|\bcommits?\b|\bauthors?\b|\bhistory\b|\bshallow clone\b|\bfile[- ]level diff\b|\bblame\b/i;
+const DEPENDENCY_CLAIM = /\bdependenc(?:y|ies)\b|\bnode_modules\b|\bpackage\.json\b|\bunresolved imports?\b|\bimports?\b|\bexports?\b/i;
+const DEPENDENCY_ABSENCE = /\b(no|zero|none|without|not have|does not have|doesn't have|has no|are absent|is absent)\b/i;
+const CONFIGURATION_CLAIM = /\beslint\b|\brule ?set\b/i;
+function cites(evidence, source, fields) {
+    return evidence.some((item) => item.source === source && (fields === undefined || fields.includes(item.field)));
+}
+function structuralDependencyEvidence(evidence) {
+    return evidence.some((item) => (item.source === 'dependencies' && item.field !== 'dependenciesTruncated') ||
+        item.field === 'importCount' ||
+        item.field === 'exportCount' ||
+        item.field === 'totalImports' ||
+        item.field === 'totalExports');
+}
+function assertClaimsAgainstEvidence(text, evidence) {
+    if (GIT_HISTORY_CLAIM.test(text) && !cites(evidence, 'history')) {
+        throw unsupportedClaim('Git-history');
+    }
+    if (DEPENDENCY_CLAIM.test(text)) {
+        const allowed = DEPENDENCY_ABSENCE.test(text) ? structuralDependencyEvidence(evidence) : structuralDependencyEvidence(evidence) || cites(evidence, 'dependencies');
+        if (!allowed)
+            throw unsupportedClaim('dependency');
+    }
+    if (CONFIGURATION_CLAIM.test(text) && !cites(evidence, 'static', ['repositoryConfigUsed', 'ruleSet'])) {
+        throw unsupportedClaim('configuration');
+    }
+}
+function assertNarrativeClaims(summary, observations) {
+    const cited = observations.flatMap((observation) => observation.evidence);
+    assertClaimsAgainstEvidence(summary, cited);
+    for (const observation of observations) {
+        assertClaimsAgainstEvidence(observation.interpretation, observation.evidence);
+    }
+}
+function assertLimitationClaims(context, limitations) {
+    const available = listEvidencePointers(context);
+    const text = limitations.join(' ');
+    if (GIT_HISTORY_CLAIM.test(text)) {
+        const incompleteClaim = /\b(incomplete|unavailable|missing|absent|shallow|not available|not supplied|no file)\b/i.test(text);
+        const allowed = incompleteClaim ? historyIsIncomplete(context) : cites(available, 'history');
+        if (!allowed)
+            throw unsupportedClaim('Git-history');
+    }
+    if (!DEPENDENCY_CLAIM.test(text))
+        return;
+    const recorded = cites(available, 'dependencies') ||
+        dependenciesAreUnresolved(context) ||
+        context.limitations.some((item) => item.source === 'dependencies');
+    const allowed = DEPENDENCY_ABSENCE.test(text) ? structuralDependencyEvidence(available) : recorded;
+    if (!allowed)
+        throw unsupportedClaim('dependency');
+}
+function unsupportedClaim(label) {
+    return new LlmError('INVALID_RESPONSE', `The AI interpretation states a ${label} fact that the cited evidence does not establish.`);
+}
+function unsupportedReference(source, field, index) {
+    const pointer = `${source}.${field}${index === null ? '' : `[${index}]`}`;
+    return new LlmError('INVALID_RESPONSE', `The AI provider cited evidence that is not in the supplied context (${pointer}).`);
+}
+function validationError(kind) {
+    if (kind === 'invalid_json')
+        return new LlmError('INVALID_RESPONSE', 'The AI provider returned invalid JSON.');
+    if (kind === 'schema')
+        return new LlmError('INVALID_RESPONSE', 'The AI provider returned output that does not match the response schema.');
+    if (kind === 'bounds')
+        return new LlmError('INVALID_RESPONSE', 'The AI provider returned output outside the allowed bounds.');
+    return new LlmError('INVALID_RESPONSE', 'The AI provider cited evidence that is not in the supplied context.');
+}
+function hasExactKeys(value, keys) {
+    const actual = Object.keys(value);
+    return actual.length === keys.length && keys.every((key) => actual.includes(key));
+}
+function isEvidenceSource(value) {
+    return EVIDENCE_SOURCES.some((source) => source === value);
+}
+function isEvidenceField(value) {
+    return EVIDENCE_FIELDS.some((field) => field === value);
+}
+function isConfidence(value) {
+    return value === 'low' || value === 'medium' || value === 'high';
+}
+function preserveContextLimitations(context, interpretation) {
+    const limitations = [...interpretation.limitations];
+    const mentioned = limitations.join(' ').toLowerCase();
+    if (historyIsIncomplete(context) && !/shallow|incomplete|history/.test(mentioned)) {
+        limitations.push('Git history in the supplied context is shallow or incomplete.');
+    }
+    if (parseCoverageIsIncomplete(context) && !/parse/.test(limitations.join(' ').toLowerCase())) {
+        limitations.push('Some source files could not be parsed, so AST coverage is incomplete.');
+    }
+    if (dependenciesAreUnresolved(context) && !/unresolved|dependenc/.test(limitations.join(' ').toLowerCase())) {
+        limitations.push('Some dependency references could not be resolved.');
+    }
+    for (const item of context.limitations) {
+        if (item.source !== 'static')
+            continue;
+        const marker = item.message.slice(0, 48).toLowerCase();
+        const already = limitations.join(' ').toLowerCase();
+        if (marker !== '' && !already.includes(marker)) {
+            const text = item.message.length <= MAX_TEXT ? item.message : item.message.slice(0, MAX_TEXT);
+            limitations.push(text);
+        }
+    }
+    const required = limitations.slice(interpretation.limitations.length);
+    const room = Math.max(0, MAX_LIMITATIONS - required.length);
+    return {
+        ...interpretation,
+        limitations: [...interpretation.limitations.slice(0, room), ...required].slice(0, MAX_LIMITATIONS),
+    };
+}
+function historyIsIncomplete(context) {
+    if (context.mode === 'repository-summary') {
+        return context.history.historyDepth === 'shallow' || !context.history.isComplete;
+    }
+    if (context.mode === 'experiment-file-baseline')
+        return false;
+    if (context.mode === 'experiment-file-proposed') {
+        if (context.history) {
+            return context.history.historyDepth === 'shallow' || !context.history.isComplete;
+        }
+        return context.limitations.some((item) => item.source === 'history');
+    }
+    if (context.file.history) {
+        return context.file.history.historyDepth === 'shallow' || !context.file.history.isComplete;
+    }
+    return context.limitations.some((item) => item.source === 'history');
+}
+function parseCoverageIsIncomplete(context) {
+    if (context.mode === 'repository-summary')
+        return context.ast.parseErrors > 0;
+    return context.file.ast === null;
+}
+function dependenciesAreUnresolved(context) {
+    if (context.mode === 'repository-summary')
+        return context.dependencies.unresolvedImports > 0;
+    if (context.mode === 'experiment-file-baseline')
+        return false;
+    if (context.mode === 'experiment-file-proposed')
+        return context.dependencies.unresolved.length > 0;
+    return context.file.dependencies.unresolved.length > 0;
+}
+function toLlmError(error) {
+    if (error instanceof APIConnectionTimeoutError) {
+        return new LlmError('TIMEOUT', 'The AI provider timed out.');
+    }
+    if (error instanceof RateLimitError) {
+        return new LlmError('RATE_LIMIT', 'The AI provider rate limit was reached.');
+    }
+    if (error instanceof AuthenticationError) {
+        return new LlmError('UNAVAILABLE', 'The AI provider rejected the credentials.');
+    }
+    if (error instanceof APIConnectionError) {
+        return new LlmError('UNAVAILABLE', 'The AI provider could not be reached.');
+    }
+    if (error instanceof APIError) {
+        return new LlmError('UNAVAILABLE', 'The AI provider request failed.');
+    }
+    return new LlmError('UNAVAILABLE', 'The AI provider request failed.');
+}
+function isRecord(value) {
+    return typeof value === 'object' && value !== null;
+}

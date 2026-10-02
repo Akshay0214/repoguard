@@ -4,10 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "test": "tsx --test test/acquisition.test.ts test/analyzers.test.ts test/context-ai.test.ts test/debt-health.test.ts test/debt-readiness.test.ts test/api.test.ts"
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test test/acquisition.test.js test/analyzers.test.js test/context-ai.test.js test/debt-health.test.js test/debt-readiness.test.js test/api.test.js"
   },
   "dependencies": {
     "@babel/parser": "^7.29.9",
@@ -19,14 +18,7 @@
     "mongodb": "^6.20.0",
     "multer": "^2.0.2",
     "openai": "^7.23.0",
-    "adm-zip": "^0.5.16"
-  },
-  "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^4.17.23",
-    "@types/multer": "^1.4.13",
-    "@types/node": "^24.5.2",
-    "tsx": "^4.20.5",
+    "adm-zip": "^0.5.16",
     "typescript": "^5.9.2"
   }
 }
