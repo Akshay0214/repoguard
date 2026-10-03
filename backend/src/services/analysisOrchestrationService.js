@@ -305,9 +305,10 @@ function overallStatus(job, modules) {
         return 'acquiring';
     if (job.status === 'failed')
         return 'failed';
-    if (!job.workspacePath)
-        return 'failed';
     const values = MODULES.map((name) => modules[name]);
+    const recorded = values.some((status) => status !== 'pending');
+    if (!job.workspacePath && !recorded)
+        return 'failed';
     if (values.some((status) => status === 'pending' || status === 'running'))
         return 'analyzing';
     const failed = values.filter((status) => status === 'failed').length;

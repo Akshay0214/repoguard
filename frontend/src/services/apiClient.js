@@ -110,7 +110,14 @@ export async function getText(path) {
     }
     const text = await response.text();
     if (!response.ok) {
-        throw new ApiError('The report could not be downloaded.', response.status);
+        let message = 'The report could not be downloaded.';
+        try {
+            message = messageFromErrorBody(JSON.parse(text)) ?? message;
+        }
+        catch {
+            // The error body is not JSON.
+        }
+        throw new ApiError(message, response.status);
     }
     return text;
 }

@@ -811,7 +811,10 @@ export async function getTechnicalDebtReport(analysisId) {
     };
 }
 export async function downloadAnalysisReport(analysisId) {
-    return getJson(`/analyses/${encodeURIComponent(analysisId)}/report`);
+    const payload = await getJson(`/analyses/${encodeURIComponent(analysisId)}/report`);
+    if (typeof payload === 'object' && payload !== null && 'data' in payload && payload.data)
+        return payload.data;
+    return payload;
 }
 export async function downloadAnalysisReportHtml(analysisId) {
     return getText(`/analyses/${encodeURIComponent(analysisId)}/report.html`);

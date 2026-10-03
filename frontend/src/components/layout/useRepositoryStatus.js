@@ -5,7 +5,10 @@ import { getAnalysisStatus } from '@/services/repositoryService';
 const POLL_MS = 2000;
 export function useRepositoryStatus() {
     const { currentAnalysis } = useAnalysis();
-    const [readiness, setReadiness] = useState(null);
+    const [snapshot, setSnapshot] = useState({ analysisId: null, readiness: null, unavailable: false });
+    const analysisId = currentAnalysis?.analysisId ?? null;
+    const readiness = snapshot.analysisId === analysisId ? snapshot.readiness : null;
+    const unavailable = snapshot.analysisId === analysisId && snapshot.unavailable;
     useEffect(() => {
         if (!currentAnalysis)
             return undefined;
@@ -16,7 +19,7 @@ export function useRepositoryStatus() {
                 const next = await getAnalysisStatus(currentAnalysis.analysisId);
                 if (cancelled)
                     return;
-                setReadiness(next);
+                setSnapshot({ analysisId: currentAnalysis.analysisId, readiness: next, unavailable: false });
                 if (next.status === 'queued' || next.status === 'acquiring' || next.status === 'analyzing') {
                     timer = window.setTimeout(() => void poll(), POLL_MS);
                 }
@@ -26,7 +29,9 @@ export function useRepositoryStatus() {
                     return;
                 if (caught instanceof ApiError && caught.status === 409) {
                     timer = window.setTimeout(() => void poll(), POLL_MS);
+                    return;
                 }
+                setSnapshot({ analysisId: currentAnalysis.analysisId, readiness: null, unavailable: true });
             }
         };
         void poll();
@@ -37,6 +42,8 @@ export function useRepositoryStatus() {
     }, [currentAnalysis]);
     if (!currentAnalysis)
         return { readiness: null, productStatus: 'none' };
+    if (unavailable)
+        return { readiness, productStatus: 'unavailable' };
     if (!readiness)
         return { readiness: null, productStatus: 'acquiring' };
     if (readiness.status === 'ready')

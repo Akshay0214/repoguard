@@ -78,6 +78,10 @@ test('debt endpoint retries only while analysis is still in progress', async () 
         restoreTerminalRun(restored.analysisId, stored, readyModules(), ['Git history evidence is unavailable.']);
         const restoredDebt = await debt(base, restored.analysisId, auth);
         assert.equal(restoredDebt.status, 200);
+        const restoredStatus = await fetch(`${base}/api/analyses/${restored.analysisId}/status`, { headers: auth });
+        assert.equal(restoredStatus.status, 200);
+        const restoredStatusBody = await restoredStatus.json();
+        assert.equal(restoredStatusBody.data.status, 'ready');
         assert.equal(restoredDebt.body.data?.analysisId, restored.analysisId);
         assert.equal(restoredDebt.body.data?.summary.itemCount, stored.summary.itemCount);
         assert.equal(restoredDebt.body.data?.summary.estimatedContribution, stored.summary.estimatedContribution);

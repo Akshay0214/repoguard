@@ -28,7 +28,7 @@ const WORKFLOW = [
     {
         icon: GitBranch,
         title: 'Submit a GitHub repository',
-        body: 'Start from a public GitHub URL and branch. ZIP upload is not available.',
+        body: 'Start from a public GitHub URL and branch, or upload a ZIP archive from the analyze page.',
     },
     {
         icon: ScanSearch,
